@@ -143,12 +143,18 @@ if st.button("🔍 Run Discovery Pipeline", key="run_button", use_container_widt
             status_text.text(f"Querying {target}... ({idx+1}/{len(primary_targets)})")
             
             try:
-                url = f"https://string-db.org/api/json/interaction_partners?identifiers={target}&species=9606&required_score={confidence_threshold}&format=json"
-                response = requests.get(url, timeout=10)
+                # STRING-db requires score on 0-1000 scale
+                score_threshold = int(confidence_threshold * 1000)
+                url = f"https://string-db.org/api/json/interaction_partners?identifiers={target}&species=9606&required_score={score_threshold}&limit=200"
+                response = requests.get(url, timeout=15)
+                response.raise_for_status()
                 interactions = response.json()
                 
                 for interaction in interactions:
-                    gene = interaction.get("stringId", "").split(".")[-1].upper()
+                    # preferredName_B is the interacting partner
+                    gene = interaction.get("preferredName_B", "").upper()
+                    if not gene:
+                        gene = interaction.get("stringId_B", "").split(".")[-1].upper()
                     score = float(interaction.get("score", 0))
                     
                     if gene in druggable_set and gene not in primary_targets:
@@ -156,10 +162,10 @@ if st.button("🔍 Run Discovery Pipeline", key="run_button", use_container_widt
                             "Gene": gene,
                             "Score": round(score, 3),
                             "InteractsWith": target,
-                            "Experiments": round(float(interaction.get("expertscore", 0)), 3),
-                            "Coexpression": round(float(interaction.get("escore", 0)), 3),
-                            "Database": round(float(interaction.get("dscore", 0)), 3),
-                            "StringID": interaction.get("stringId", "")
+                            "Experiments": round(float(interaction.get("experimentsscore", 0)), 3),
+                            "Coexpression": round(float(interaction.get("coexpressionscore", 0)), 3),
+                            "Database": round(float(interaction.get("databasescore", 0)), 3),
+                            "StringID": interaction.get("stringId_B", "")
                         })
                 
                 progress_bar.progress((idx + 1) / len(primary_targets))
