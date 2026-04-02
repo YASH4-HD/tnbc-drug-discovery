@@ -5,3 +5,5 @@ scipy
 rdkit
 gemmi
 meeko
+py3Dmol
+stmol
