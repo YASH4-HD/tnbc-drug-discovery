@@ -116,7 +116,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2, tab3, tab4 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking"])
 
 with tab1:
     # Main content
@@ -615,6 +615,146 @@ exhaustiveness = {exhaustiveness}
                     )
 
                     st.info("💡 Next step: Run AutoDock Vina with these PDBQT files + the config.txt from Section A")
+
+
+with tab5:
+    st.markdown("### 🚀 Run AutoDock Vina in Cloud")
+    st.markdown("""
+    Upload your prepared files and run **AutoDock Vina** directly in the cloud — no local installation needed.
+    Vina binary is auto-downloaded from the official GitHub release.
+    """)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("""
+        **Required files:**
+        - 🧬 Receptor PDBQT (from Tab 3 → cleaned, then converted externally)
+        - 💊 Ligand PDBQT (from Tab 4 → Section B output)
+        - ⚙️ Config TXT (from Tab 4 → Section A output)
+        """)
+    with col2:
+        st.warning("""
+        **Note:** First run downloads Vina (~4MB). 
+        Docking takes **1-3 minutes** per ligand depending on exhaustiveness.
+        Results are the top binding poses ranked by ΔG (kcal/mol).
+        """)
+
+    st.markdown("---")
+
+    receptor_file = st.file_uploader("🧬 Upload Receptor (PDBQT)", type=['pdbqt'], key="rec_upload")
+    ligand_file = st.file_uploader("💊 Upload Ligand (PDBQT)", type=['pdbqt'], key="lig_upload")
+    config_file = st.file_uploader("⚙️ Upload Config (TXT)", type=['txt'], key="conf_upload")
+
+    # Show config preview
+    if config_file:
+        config_text = config_file.read().decode("utf-8")
+        config_file.seek(0)
+        st.markdown("**Config preview:**")
+        st.code(config_text, language="text")
+
+    if st.button("🚀 Run AutoDock Vina Docking", use_container_width=True):
+        if receptor_file and ligand_file and config_file:
+            
+            # Save uploaded files to disk (Vina needs physical files)
+            with open("receptor.pdbqt", "wb") as f:
+                f.write(receptor_file.getbuffer())
+            with open("ligand.pdbqt", "wb") as f:
+                f.write(ligand_file.getbuffer())
+            with open("config.txt", "wb") as f:
+                f.write(config_file.getbuffer())
+
+            vina_path = "./vina"
+
+            # Download Vina binary if not present
+            if not os.path.exists(vina_path):
+                with st.spinner("⬇️ Downloading AutoDock Vina binary (~4MB)..."):
+                    try:
+                        import urllib.request
+                        url = "https://github.com/ccsb-scripps/AutoDock-Vina/releases/download/v1.2.5/vina_1.2.5_linux_x86_64"
+                        urllib.request.urlretrieve(url, vina_path)
+                        os.system("chmod +x " + vina_path)
+                        st.success("✅ Vina downloaded successfully!")
+                    except Exception as e:
+                        st.error(f"❌ Failed to download Vina: {str(e)}")
+                        st.stop()
+
+            with st.spinner("🔬 Running docking... (1-3 minutes)"):
+                import subprocess
+                cmd = [
+                    vina_path,
+                    "--receptor", "receptor.pdbqt",
+                    "--ligand", "ligand.pdbqt",
+                    "--config", "config.txt",
+                    "--out", "result_out.pdbqt"
+                ]
+                process = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+            if process.returncode == 0 or "Writing output" in process.stdout:
+                st.success("✅ Docking Completed Successfully!")
+                st.markdown("---")
+
+                # Parse binding affinities from Vina output
+                st.markdown("#### 📊 Binding Affinity Results")
+                lines = process.stdout.split("\n")
+                result_lines = []
+                capture = False
+                for line in lines:
+                    if "mode" in line and "affinity" in line:
+                        capture = True
+                    if capture and line.strip():
+                        result_lines.append(line)
+
+                if result_lines:
+                    st.code("\n".join(result_lines[:15]), language="text")
+
+                    # Try to parse into a table
+                    try:
+                        import re
+                        rows = []
+                        for line in result_lines[2:]:
+                            parts = line.split()
+                            if len(parts) >= 4 and parts[0].isdigit():
+                                rows.append({
+                                    "Mode": int(parts[0]),
+                                    "Affinity (kcal/mol)": float(parts[1]),
+                                    "RMSD l.b.": float(parts[2]),
+                                    "RMSD u.b.": float(parts[3])
+                                })
+                        if rows:
+                            results_df = pd.DataFrame(rows)
+                            st.dataframe(results_df, use_container_width=True, hide_index=True)
+                            best = results_df.iloc[0]
+                            st.metric(
+                                "🏆 Best Binding Affinity",
+                                f"{best['Affinity (kcal/mol)']} kcal/mol",
+                                help="More negative = stronger binding"
+                            )
+                    except:
+                        pass
+
+                # Terminal logs
+                with st.expander("📋 Full Vina Terminal Output"):
+                    st.text_area("Logs:", process.stdout, height=300)
+
+                # Download result
+                if os.path.exists("result_out.pdbqt"):
+                    with open("result_out.pdbqt", "rb") as f:
+                        result_data = f.read()
+                    st.download_button(
+                        label="📥 Download Docked Poses (PDBQT)",
+                        data=result_data,
+                        file_name=f"docked_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdbqt",
+                        mime="chemical/x-pdb",
+                        use_container_width=True
+                    )
+            else:
+                st.error("❌ Docking Failed!")
+                with st.expander("🔍 Error Logs"):
+                    st.text_area("stderr:", process.stderr, height=300)
+                    st.text_area("stdout:", process.stdout, height=200)
+
+        else:
+            st.warning("⚠️ Please upload all 3 files: Receptor PDBQT, Ligand PDBQT, and Config TXT")
 
 
 # Footer
