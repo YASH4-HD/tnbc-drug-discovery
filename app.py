@@ -3,6 +3,8 @@
 TNBC Drug Discovery Pipeline
 STRING-db target discovery and ranking for triple negative breast cancer
 """
+from rdkit import Chem
+from meeko import MoleculePreparation
 
 import streamlit as st
 import requests
