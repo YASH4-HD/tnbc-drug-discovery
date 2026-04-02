@@ -3,4 +3,5 @@ pandas
 numpy
 scipy
 rdkit
+gemmi
 meeko
