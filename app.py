@@ -109,7 +109,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation"])
+tab1, tab2, tab3 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep"])
 
 with tab1:
     # Main content
@@ -394,6 +394,89 @@ with tab2:
                         )
                     else:
                         st.error("No files were successfully processed.")
+
+with tab3:
+    st.markdown("### 🧪 Protein Structure Preparation")
+    st.markdown("""
+    Upload a raw PDB file to automatically remove water molecules (HOH) and existing ligands (HETATM records),
+    keeping only standard protein ATOM records — ready for AutoDock Vina.
+    
+    **Workflow:** Upload raw PDB → Remove HOH + HETATM → Keep ATOM/TER/END → Download clean PDB
+    """)
+    
+    uploaded_pdb = st.file_uploader(
+        "Upload Raw PDB File",
+        type=["pdb"],
+        help="Download from RCSB PDB (rcsb.org)"
+    )
+    
+    if uploaded_pdb:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.info(f"**File:** {uploaded_pdb.name}  \n**Size:** {uploaded_pdb.size / 1024:.1f} KB")
+        with col2:
+            st.markdown("""
+            **What gets removed:**
+            - 💧 Water molecules (`HOH`)
+            - 💊 Existing ligands (all `HETATM` records)
+            
+            **What is kept:**
+            - 🧬 Standard amino acid atoms (`ATOM`)
+            - 🔚 Chain terminators (`TER`, `END`)
+            """)
+        
+        if st.button("🧹 Clean Protein Structure", use_container_width=True):
+            try:
+                lines = uploaded_pdb.read().decode("utf-8").splitlines(keepends=True)
+                
+                removed_water = 0
+                removed_ligand = 0
+                kept_atoms = 0
+                clean_lines = []
+                
+                for line in lines:
+                    if line.startswith("HETATM"):
+                        if "HOH" in line:
+                            removed_water += 1
+                        else:
+                            removed_ligand += 1
+                        continue
+                    elif line.startswith("ATOM"):
+                        clean_lines.append(line)
+                        kept_atoms += 1
+                    elif line.startswith("TER") or line.startswith("END"):
+                        clean_lines.append(line)
+                
+                clean_pdb_content = "".join(clean_lines)
+                
+                st.markdown("---")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("💧 Water Removed", removed_water)
+                col2.metric("💊 Ligands Removed", removed_ligand)
+                col3.metric("🧬 Atoms Kept", kept_atoms)
+                
+                if kept_atoms > 0:
+                    st.success("✅ Protein cleaned successfully! Ready for docking.")
+                    
+                    output_name = uploaded_pdb.name.replace(".pdb", "_clean.pdb")
+                    st.download_button(
+                        label=f"📥 Download Clean PDB ({output_name})",
+                        data=clean_pdb_content,
+                        file_name=output_name,
+                        mime="chemical/x-pdb",
+                        use_container_width=True
+                    )
+                    
+                    # Preview first 10 ATOM lines
+                    st.markdown("#### 🔎 Preview (first 10 ATOM lines)")
+                    preview_lines = [l for l in clean_lines if l.startswith("ATOM")][:10]
+                    st.code("".join(preview_lines), language="text")
+                else:
+                    st.error("No ATOM records found. Check if the file is a valid PDB.")
+                    
+            except Exception as e:
+                st.error(f"❌ Error processing PDB: {str(e)}")
+
 
 # Footer
 st.markdown("---")
