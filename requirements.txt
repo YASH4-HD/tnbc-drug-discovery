@@ -2,5 +2,6 @@ streamlit
 requests
 pandas
 openpyxl
-rdkit
-meeko==0.5.0
+numpy
+rdkit-pypi
+meeko
