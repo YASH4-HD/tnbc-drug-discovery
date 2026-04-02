@@ -3,4 +3,4 @@ requests
 pandas
 openpyxl
 rdkit
-meeko
+meeko==0.5.0
