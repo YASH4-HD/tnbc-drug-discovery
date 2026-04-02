@@ -15,6 +15,13 @@ import os
 import zipfile
 
 try:
+    import py3Dmol
+    from stmol import showmol
+    PY3DMOL_AVAILABLE = True
+except ImportError:
+    PY3DMOL_AVAILABLE = False
+
+try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
     from rdkit.Chem import AllChem, Descriptors
@@ -116,7 +123,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking", "🔬 3D Visualization"])
 
 with tab1:
     # Main content
@@ -755,6 +762,97 @@ with tab5:
 
         else:
             st.warning("⚠️ Please upload all 3 files: Receptor PDBQT, Ligand PDBQT, and Config TXT")
+
+
+with tab6:
+    st.markdown("### 🔬 3D Visualization of Docked Complex")
+    st.markdown("""
+    Visualize the receptor-ligand docked complex in interactive 3D.
+    Use files from **Tab 5** output, or upload directly here.
+    """)
+
+    if not PY3DMOL_AVAILABLE:
+        st.error("❌ py3Dmol / stmol not installed. Add to requirements.txt and redeploy.")
+    else:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**Option A: Use files from Tab 5 docking run**")
+            use_previous = st.checkbox("Use receptor.pdbqt + result_out.pdbqt from Tab 5", value=True)
+
+        with col2:
+            st.markdown("**Option B: Upload files manually**")
+            viz_receptor = st.file_uploader("Upload Receptor PDBQT", type=["pdbqt"], key="viz_rec")
+            viz_ligand = st.file_uploader("Upload Docked Ligand PDBQT", type=["pdbqt"], key="viz_lig")
+
+        st.markdown("---")
+
+        # Style options
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            receptor_style = st.selectbox("Receptor Style", ["cartoon", "surface", "line", "stick"], index=0)
+            receptor_color = st.color_picker("Receptor Color", "#d3d3d3")
+        with col2:
+            ligand_style = st.selectbox("Ligand Style", ["stick", "sphere", "line", "cross"], index=0)
+            ligand_color = st.selectbox("Ligand Color Scheme", ["greenCarbon", "cyanCarbon", "magentaCarbon", "yellowCarbon"], index=0)
+        with col3:
+            bg_color = st.color_picker("Background Color", "#1a1a2e")
+            viewer_height = st.slider("Viewer Height (px)", 400, 800, 550, step=50)
+
+        if st.button("🎨 Render 3D Structure", use_container_width=True):
+            receptor_data = None
+            ligand_data = None
+
+            # Load data
+            if use_previous and not viz_receptor and not viz_ligand:
+                try:
+                    with open("receptor.pdbqt", "r") as f:
+                        receptor_data = f.read()
+                    with open("result_out.pdbqt", "r") as f:
+                        ligand_data = f.read()
+                    st.success("✅ Loaded files from Tab 5 docking run")
+                except FileNotFoundError:
+                    st.warning("⚠️ Tab 5 files not found. Please upload files manually or run docking first.")
+
+            if viz_receptor and viz_ligand:
+                receptor_data = viz_receptor.read().decode("utf-8")
+                ligand_data = viz_ligand.read().decode("utf-8")
+                st.success("✅ Loaded uploaded files")
+
+            if receptor_data and ligand_data:
+                try:
+                    view = py3Dmol.view(width=800, height=viewer_height)
+
+                    # Add receptor
+                    view.addModel(receptor_data, "pdbqt")
+                    if receptor_style == "cartoon":
+                        view.setStyle({"model": 0}, {"cartoon": {"color": receptor_color}})
+                    elif receptor_style == "surface":
+                        view.setStyle({"model": 0}, {"cartoon": {"color": receptor_color}})
+                        view.addSurface(py3Dmol.VDW, {"opacity": 0.7, "color": receptor_color}, {"model": 0})
+                    else:
+                        view.setStyle({"model": 0}, {receptor_style: {"color": receptor_color}})
+
+                    # Add ligand
+                    view.addModel(ligand_data, "pdbqt")
+                    view.setStyle({"model": 1}, {ligand_style: {"colorscheme": ligand_color}})
+
+                    # Zoom to ligand
+                    view.zoomTo({"model": 1})
+                    view.setBackgroundColor(bg_color)
+                    view.spin(False)
+
+                    showmol(view, height=viewer_height, width=800)
+
+                    st.markdown("---")
+                    col1, col2, col3 = st.columns(3)
+                    col1.info("🖱️ **Rotate:** Left click + drag")
+                    col2.info("🔍 **Zoom:** Scroll wheel")
+                    col3.info("✋ **Pan:** Right click + drag")
+
+                except Exception as e:
+                    st.error(f"❌ Visualization error: {str(e)}")
+            else:
+                st.warning("⚠️ No structure data available. Run docking in Tab 5 or upload files.")
 
 
 # Footer
