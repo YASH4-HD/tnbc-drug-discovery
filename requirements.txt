@@ -1,7 +1,5 @@
 streamlit
-requests
 pandas
-openpyxl
 numpy
-rdkit-pypi
+rdkit
 meeko
