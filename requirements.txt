@@ -7,3 +7,4 @@ gemmi
 meeko
 py3Dmol
 stmol
+requests
