@@ -17,9 +17,16 @@ import zipfile
 try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
+    from rdkit.Chem import AllChem, Descriptors
     RDKIT_AVAILABLE = True
 except ImportError:
     RDKIT_AVAILABLE = False
+
+try:
+    from meeko import MoleculePreparation
+    MEEKO_AVAILABLE = True
+except ImportError:
+    MEEKO_AVAILABLE = False
 
 # Page config
 st.set_page_config(
@@ -109,7 +116,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2, tab3 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep"])
+tab1, tab2, tab3, tab4 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep"])
 
 with tab1:
     # Main content
@@ -476,6 +483,138 @@ with tab3:
                     
             except Exception as e:
                 st.error(f"❌ Error processing PDB: {str(e)}")
+
+
+with tab4:
+    st.markdown("### ⚗️ AutoDock Vina Docking Preparation")
+    st.markdown("""
+    Generate a **Grid Box config file** for AutoDock Vina and convert **3D SDF ligands → PDBQT format** 
+    using Meeko (Gasteiger charges + AutoDock atom types). 
+    """)
+
+    # --- Section A: Grid Box Config ---
+    st.subheader("A. Grid Box Configuration")
+    st.markdown("Set the docking search space coordinates. For EGFR kinase domain (PDB: 1M17), ATP-binding pocket defaults are pre-filled.")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        center_x = st.number_input("Center X (Å)", value=22.5, step=0.5)
+        size_x = st.number_input("Size X (Å)", value=25, step=1)
+    with col2:
+        center_y = st.number_input("Center Y (Å)", value=4.5, step=0.5)
+        size_y = st.number_input("Size Y (Å)", value=25, step=1)
+    with col3:
+        center_z = st.number_input("Center Z (Å)", value=51.5, step=0.5)
+        size_z = st.number_input("Size Z (Å)", value=25, step=1)
+
+    exhaustiveness = st.slider("Exhaustiveness (Search Rigor)", min_value=4, max_value=32, value=8, step=4,
+                               help="Higher = more thorough search, slower. 8 is standard.")
+
+    receptor_name = st.text_input("Receptor PDBQT filename", value="receptor.pdbqt")
+
+    if st.button("📄 Generate config.txt", use_container_width=True):
+        config_content = f"""receptor = {receptor_name}
+center_x = {center_x}
+center_y = {center_y}
+center_z = {center_z}
+size_x = {size_x}
+size_y = {size_y}
+size_z = {size_z}
+exhaustiveness = {exhaustiveness}
+"""
+        st.success("✅ config.txt generated!")
+        st.code(config_content, language="text")
+        st.download_button(
+            label="📥 Download config.txt",
+            data=config_content,
+            file_name="config.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
+
+    st.divider()
+
+    # --- Section B: Ligand PDBQT Conversion ---
+    st.subheader("B. Batch Ligand Conversion (SDF → PDBQT)")
+    st.markdown("Upload your 3D minimized SDF files (from Tab 2). Uses **Meeko** to assign Gasteiger charges and AutoDock atom types.")
+
+    if not MEEKO_AVAILABLE:
+        st.error("❌ Meeko not installed. Add `meeko` to requirements.txt and redeploy.")
+    elif not RDKIT_AVAILABLE:
+        st.error("❌ RDKit not installed. Add `rdkit` to requirements.txt and redeploy.")
+    else:
+        uploaded_3d_sdfs = st.file_uploader(
+            "Upload 3D Minimized SDF Files",
+            type=["sdf"],
+            accept_multiple_files=True,
+            key="pdbqt_uploader",
+            help="Use files from Tab 2 (3D Ligand Preparation output)"
+        )
+
+        if uploaded_3d_sdfs:
+            st.info(f"**{len(uploaded_3d_sdfs)} file(s)** ready for PDBQT conversion")
+
+            if st.button("⚙️ Convert All Ligands to PDBQT", use_container_width=True):
+                pdbqt_files = {}
+                failed = []
+
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+
+                for i, uploaded_file in enumerate(uploaded_3d_sdfs):
+                    ligand_name = uploaded_file.name.replace(".sdf", "")
+                    status_text.text(f"Converting {ligand_name}... ({i+1}/{len(uploaded_3d_sdfs)})")
+
+                    try:
+                        with tempfile.NamedTemporaryFile(suffix=".sdf", delete=False) as tmp:
+                            tmp.write(uploaded_file.read())
+                            tmp_path = tmp.name
+
+                        supplier = Chem.SDMolSupplier(tmp_path, removeHs=False)
+                        mol = supplier[0] if supplier and len(supplier) > 0 else None
+                        os.unlink(tmp_path)
+
+                        if mol is not None:
+                            preparator = MoleculePreparation()
+                            preparator.prepare(mol)
+                            pdbqt_string = preparator.write_pdbqt_string()
+                            pdbqt_files[f"{ligand_name}.pdbqt"] = pdbqt_string
+                            st.success(f"✅ {ligand_name}.pdbqt — converted")
+                        else:
+                            failed.append(ligand_name)
+                            st.error(f"⚠️ Could not parse {ligand_name}")
+
+                    except Exception as e:
+                        failed.append(ligand_name)
+                        st.error(f"❌ {ligand_name}: {str(e)}")
+
+                    progress_bar.progress((i + 1) / len(uploaded_3d_sdfs))
+
+                status_text.text("✅ Conversion complete!")
+
+                if pdbqt_files:
+                    # Pack all PDBQT into ZIP
+                    zip_buffer = io.BytesIO()
+                    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        for fname, content_str in pdbqt_files.items():
+                            zf.writestr(fname, content_str)
+                    zip_buffer.seek(0)
+
+                    st.markdown("---")
+                    col1, col2, col3 = st.columns(3)
+                    col1.metric("✅ Converted", len(pdbqt_files))
+                    col2.metric("❌ Failed", len(failed))
+                    col3.metric("Total", len(uploaded_3d_sdfs))
+
+                    st.download_button(
+                        label="📥 Download All PDBQT Files (ZIP)",
+                        data=zip_buffer.getvalue(),
+                        file_name=f"vina_ligands_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
+                        mime="application/zip",
+                        use_container_width=True
+                    )
+
+                    st.info("💡 Next step: Run AutoDock Vina with these PDBQT files + the config.txt from Section A")
 
 
 # Footer
