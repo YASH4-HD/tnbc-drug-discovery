@@ -1,10 +1,10 @@
 streamlit
+requests
 pandas
 numpy
 scipy
 rdkit
 gemmi
 meeko
-py3Dmol
-stmol
-requests
+py3Dmol==2.0.4
+stmol==0.0.9
