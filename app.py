@@ -780,7 +780,7 @@ with tab6:
         with col2:
             st.markdown("**Option B: Upload files manually**")
             viz_receptor = st.file_uploader("Upload Receptor PDBQT", type=["pdbqt"], key="viz_rec")
-            viz_ligand = st.file_uploader("Upload Docked Ligand PDBQT", type=["pdbqt"], key="viz_lig")
+            viz_ligand = st.file_uploader("Upload Docked Ligand (PDBQT or SDF)", type=["pdbqt", "sdf"], key="viz_lig")
 
         st.markdown("---")
 
@@ -799,12 +799,14 @@ with tab6:
             receptor_data = None
             ligand_data = None
 
+            ligand_filename = "ligand.pdbqt"
             if use_previous and not viz_receptor and not viz_ligand:
                 try:
                     with open("receptor.pdbqt", "r") as f:
                         receptor_data = f.read()
                     with open("result_out.pdbqt", "r") as f:
                         ligand_data = f.read()
+                    ligand_filename = "result_out.pdbqt"
                     st.success("✅ Loaded files from Tab 5 docking run")
                 except FileNotFoundError:
                     st.warning("⚠️ Tab 5 files not found. Upload files manually below.")
@@ -812,6 +814,7 @@ with tab6:
             if viz_receptor and viz_ligand:
                 receptor_data = viz_receptor.read().decode("utf-8")
                 ligand_data = viz_ligand.read().decode("utf-8")
+                ligand_filename = viz_ligand.name
                 st.success("✅ Loaded uploaded files")
 
             if receptor_data and ligand_data:
@@ -822,6 +825,7 @@ with tab6:
                     rec_escaped = receptor_data.replace("\\", "\\\\").replace("`", "\\`")
                     lig_escaped = ligand_data.replace("\\", "\\\\").replace("`", "\\`")
 
+                    lig_fname = ligand_filename if 'ligand_filename' in dir() else 'ligand.pdbqt'
                     html_content = f"""
 <!DOCTYPE html>
 <html>
