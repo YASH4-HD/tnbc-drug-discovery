@@ -3,8 +3,8 @@ requests
 pandas
 numpy
 scipy
+openpyxl
 rdkit
 gemmi
-meeko
+meeko==0.5.0
 py3Dmol==2.0.4
-stmol==0.0.9
