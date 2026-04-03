@@ -16,7 +16,6 @@ import zipfile
 
 try:
     import py3Dmol
-    from stmol import showmol
     PY3DMOL_AVAILABLE = True
 except ImportError:
     PY3DMOL_AVAILABLE = False
@@ -772,13 +771,12 @@ with tab6:
     """)
 
     if not PY3DMOL_AVAILABLE:
-        st.error("❌ py3Dmol / stmol not installed. Add to requirements.txt and redeploy.")
+        st.error("❌ py3Dmol not installed. Add `py3Dmol` to requirements.txt and redeploy.")
     else:
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Option A: Use files from Tab 5 docking run**")
             use_previous = st.checkbox("Use receptor.pdbqt + result_out.pdbqt from Tab 5", value=True)
-
         with col2:
             st.markdown("**Option B: Upload files manually**")
             viz_receptor = st.file_uploader("Upload Receptor PDBQT", type=["pdbqt"], key="viz_rec")
@@ -786,14 +784,13 @@ with tab6:
 
         st.markdown("---")
 
-        # Style options
         col1, col2, col3 = st.columns(3)
         with col1:
             receptor_style = st.selectbox("Receptor Style", ["cartoon", "surface", "line", "stick"], index=0)
-            receptor_color = st.color_picker("Receptor Color", "#d3d3d3")
+            receptor_color = st.color_picker("Receptor Color", "#aaaaaa")
         with col2:
             ligand_style = st.selectbox("Ligand Style", ["stick", "sphere", "line", "cross"], index=0)
-            ligand_color = st.selectbox("Ligand Color Scheme", ["greenCarbon", "cyanCarbon", "magentaCarbon", "yellowCarbon"], index=0)
+            ligand_colorscheme = st.selectbox("Ligand Color Scheme", ["greenCarbon", "cyanCarbon", "magentaCarbon", "yellowCarbon"], index=0)
         with col3:
             bg_color = st.color_picker("Background Color", "#1a1a2e")
             viewer_height = st.slider("Viewer Height (px)", 400, 800, 550, step=50)
@@ -802,7 +799,6 @@ with tab6:
             receptor_data = None
             ligand_data = None
 
-            # Load data
             if use_previous and not viz_receptor and not viz_ligand:
                 try:
                     with open("receptor.pdbqt", "r") as f:
@@ -811,7 +807,7 @@ with tab6:
                         ligand_data = f.read()
                     st.success("✅ Loaded files from Tab 5 docking run")
                 except FileNotFoundError:
-                    st.warning("⚠️ Tab 5 files not found. Please upload files manually or run docking first.")
+                    st.warning("⚠️ Tab 5 files not found. Upload files manually below.")
 
             if viz_receptor and viz_ligand:
                 receptor_data = viz_receptor.read().decode("utf-8")
@@ -820,28 +816,43 @@ with tab6:
 
             if receptor_data and ligand_data:
                 try:
-                    view = py3Dmol.view(width=800, height=viewer_height)
+                    import streamlit.components.v1 as components
 
-                    # Add receptor
-                    view.addModel(receptor_data, "pdbqt")
-                    if receptor_style == "cartoon":
-                        view.setStyle({"model": 0}, {"cartoon": {"color": receptor_color}})
-                    elif receptor_style == "surface":
-                        view.setStyle({"model": 0}, {"cartoon": {"color": receptor_color}})
-                        view.addSurface(py3Dmol.VDW, {"opacity": 0.7, "color": receptor_color}, {"model": 0})
-                    else:
-                        view.setStyle({"model": 0}, {receptor_style: {"color": receptor_color}})
+                    # Escape for JS
+                    rec_escaped = receptor_data.replace("\\", "\\\\").replace("`", "\\`")
+                    lig_escaped = ligand_data.replace("\\", "\\\\").replace("`", "\\`")
 
-                    # Add ligand
-                    view.addModel(ligand_data, "pdbqt")
-                    view.setStyle({"model": 1}, {ligand_style: {"colorscheme": ligand_color}})
-
-                    # Zoom to ligand
-                    view.zoomTo({"model": 1})
-                    view.setBackgroundColor(bg_color)
-                    view.spin(False)
-
-                    showmol(view, height=viewer_height, width=800)
+                    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.4/3Dmol-min.js"></script>
+  <style>
+    body {{ margin: 0; padding: 0; background: {bg_color}; }}
+    #viewer {{ width: 100%; height: {viewer_height}px; position: relative; }}
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <script>
+    let viewer = $3Dmol.createViewer("viewer", {{backgroundColor: "{bg_color}"}});
+    
+    let recData = `{rec_escaped}`;
+    let ligData = `{lig_escaped}`;
+    
+    viewer.addModel(recData, "pdbqt");
+    viewer.setStyle({{model: 0}}, {{"{receptor_style}": {{color: "{receptor_color}"}}}});
+    
+    viewer.addModel(ligData, "pdbqt");
+    viewer.setStyle({{model: 1}}, {{"{ligand_style}": {{colorscheme: "{ligand_colorscheme}"}}}});
+    
+    viewer.zoomTo({{model: 1}});
+    viewer.render();
+  </script>
+</body>
+</html>
+"""
+                    components.html(html_content, height=viewer_height + 20)
 
                     st.markdown("---")
                     col1, col2, col3 = st.columns(3)
