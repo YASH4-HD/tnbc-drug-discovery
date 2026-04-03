@@ -122,7 +122,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking", "🔬 3D Visualization"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking", "🔬 3D Visualization", "💊 ADMET Analysis"])
 
 with tab1:
     # Main content
@@ -868,6 +868,134 @@ with tab6:
                     st.error(f"❌ Visualization error: {str(e)}")
             else:
                 st.warning("⚠️ No structure data available. Run docking in Tab 5 or upload files.")
+
+
+with tab7:
+    st.markdown("### 💊 ADMET & Drug-Likeness Analysis")
+    st.markdown("""
+    Evaluate pharmacokinetic properties using **Lipinski's Rule of 5**.
+    Determines if a compound is likely to be an orally active drug in humans.
+    Also calculates extended properties: TPSA, Rotatable Bonds, and Molar Refractivity.
+    """)
+
+    if not RDKIT_AVAILABLE:
+        st.error("❌ RDKit not installed.")
+    else:
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            afatinib_smiles = "CN(C)CC=CC(=O)NC1=C(O[C@H]2CCOC2)C=C3C(=C1)C(=NC=N3)NC4=CC(=C(C=C4)F)Cl"
+            smiles_input = st.text_input(
+                "Enter Ligand SMILES string:",
+                value=afatinib_smiles,
+                help="Get SMILES from PubChem or ChemDraw"
+            )
+            ligand_name = st.text_input("Ligand name (optional):", value="Afatinib")
+        with col2:
+            st.info("""
+            **Lipinski's Rule of 5:**
+            - MW ≤ 500 Da
+            - LogP ≤ 5
+            - H-Bond Donors ≤ 5
+            - H-Bond Acceptors ≤ 10
+            
+            ≤1 violation = good oral bioavailability
+            """)
+
+        if st.button("🔬 Calculate Drug-Likeness", use_container_width=True):
+            with st.spinner("Analyzing molecule with RDKit..."):
+                mol = Chem.MolFromSmiles(smiles_input)
+
+                if mol is not None:
+                    from rdkit.Chem import Descriptors, rdMolDescriptors
+
+                    mw   = Descriptors.MolWt(mol)
+                    logp = Descriptors.MolLogP(mol)
+                    hbd  = Descriptors.NumHDonors(mol)
+                    hba  = Descriptors.NumHAcceptors(mol)
+                    tpsa = Descriptors.TPSA(mol)
+                    rot  = rdMolDescriptors.CalcNumRotatableBonds(mol)
+                    mr   = Descriptors.MolMR(mol)
+                    hac  = mol.GetNumHeavyAtoms()
+
+                    violations = sum([mw > 500, logp > 5, hbd > 5, hba > 10])
+
+                    # Main Lipinski table
+                    results_df = pd.DataFrame({
+                        "Property": [
+                            "Molecular Weight (Da)",
+                            "LogP (Lipophilicity)",
+                            "H-Bond Donors",
+                            "H-Bond Acceptors"
+                        ],
+                        "Value": [round(mw, 2), round(logp, 2), hbd, hba],
+                        "Threshold": ["≤ 500", "≤ 5", "≤ 5", "≤ 10"],
+                        "Status": [
+                            "✅ Pass" if mw  <= 500 else "❌ Fail",
+                            "✅ Pass" if logp <= 5   else "❌ Fail",
+                            "✅ Pass" if hbd  <= 5   else "❌ Fail",
+                            "✅ Pass" if hba  <= 10  else "❌ Fail"
+                        ]
+                    })
+
+                    st.success(f"✅ Analysis complete for **{ligand_name}**!")
+                    st.markdown("#### Lipinski Rule of 5")
+                    st.dataframe(results_df, use_container_width=True, hide_index=True)
+
+                    # Extended properties
+                    st.markdown("#### Extended Properties")
+                    ext_col1, ext_col2, ext_col3, ext_col4 = st.columns(4)
+                    ext_col1.metric("TPSA (Å²)", f"{tpsa:.1f}", help="< 140 Å² for good absorption")
+                    ext_col2.metric("Rotatable Bonds", rot, help="≤ 10 for oral drugs")
+                    ext_col3.metric("Molar Refractivity", f"{mr:.1f}", help="40-130 range preferred")
+                    ext_col4.metric("Heavy Atoms", hac)
+
+                    st.markdown("---")
+
+                    # Conclusion
+                    st.markdown("#### 🏁 Conclusion")
+                    if violations == 0:
+                        st.success(f"🌟 **Excellent!** {ligand_name} has **0 violations** — highly likely to be an effective oral drug.")
+                    elif violations == 1:
+                        st.warning(f"⚠️ **Acceptable.** {ligand_name} has **1 violation** — can still be considered as oral drug candidate.")
+                    else:
+                        st.error(f"🛑 **Poor Bioavailability.** {ligand_name} has **{violations} violations** — may not be suitable for oral administration.")
+
+                    # Additional flags
+                    flags = []
+                    if tpsa > 140: flags.append("⚠️ High TPSA (>140 Å²) — poor GI absorption likely")
+                    if rot > 10:   flags.append("⚠️ High rotatable bonds (>10) — poor oral bioavailability")
+                    if mr < 40 or mr > 130: flags.append("⚠️ Molar refractivity out of 40-130 range")
+
+                    if flags:
+                        st.markdown("**Additional flags:**")
+                        for flag in flags:
+                            st.write(flag)
+
+                    # Download results
+                    full_df = pd.DataFrame({
+                        "Ligand": [ligand_name],
+                        "SMILES": [smiles_input],
+                        "MW": [round(mw, 2)],
+                        "LogP": [round(logp, 2)],
+                        "HBD": [hbd],
+                        "HBA": [hba],
+                        "TPSA": [round(tpsa, 1)],
+                        "RotBonds": [rot],
+                        "MolMR": [round(mr, 1)],
+                        "Ro5_Violations": [violations],
+                        "Oral_Druglike": ["Yes" if violations <= 1 else "No"]
+                    })
+                    csv = full_df.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download ADMET Report (CSV)",
+                        data=csv,
+                        file_name=f"admet_{ligand_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                else:
+                    st.error("❌ Invalid SMILES string. Please check your input.")
+                    st.info("💡 Tip: Get SMILES from PubChem → search compound → 'Canonical SMILES'")
 
 
 # Footer
