@@ -46,42 +46,58 @@ except ImportError:
     MEEKO_AVAILABLE = False
 
 def mol_to_pdbqt_rdkit(mol):
-    """Pure RDKit fallback PDBQT writer — works without Meeko."""
-    from rdkit.Chem import AllChem, rdPartialCharges
+    """Pure RDKit PDBQT writer — Vina-compatible format without Meeko."""
+    from rdkit.Chem import rdPartialCharges
+    
+    # Compute Gasteiger charges
     try:
         rdPartialCharges.ComputeGasteigerCharges(mol)
     except:
         pass
-    
-    lines = []
+
     conf = mol.GetConformer()
-    atom_idx = 1
-    
-    # AutoDock atom type mapping
-    ad_types = {
-        6: 'C', 7: 'N', 8: 'O', 9: 'F', 15: 'P',
-        16: 'S', 17: 'Cl', 35: 'Br', 53: 'I', 1: 'H'
+
+    # AutoDock4 atom type mapping
+    ad4_map = {
+        6:  'C',  7:  'N',  8:  'O',  9:  'F',
+        15: 'P',  16: 'S',  17: 'Cl', 35: 'Br',
+        53: 'I',  1:  'H',  12: 'Mg', 20: 'Ca',
+        25: 'Mn', 26: 'Fe', 30: 'Zn'
     }
-    
-    for atom in mol.GetAtoms():
-        pos = conf.GetAtomPosition(atom.GetIdx())
-        symbol = atom.GetSymbol()
-        atomic_num = atom.GetAtomicNum()
-        ad_type = ad_types.get(atomic_num, symbol)
-        
+
+    lines = ["ROOT"]
+    for i, atom in enumerate(mol.GetAtoms()):
+        if atom.GetAtomicNum() == 1:
+            continue  # skip explicit H for cleaner PDBQT
+        pos   = conf.GetAtomPosition(atom.GetIdx())
+        sym   = atom.GetSymbol()
+        anum  = atom.GetAtomicNum()
+        atype = ad4_map.get(anum, sym.upper())
+
+        # Aromatic carbons → 'A', aromatic N → 'NA'
+        if atom.GetIsAromatic():
+            if anum == 6:  atype = 'A'
+            elif anum == 7: atype = 'NA'
+
+        # H-bond donor N/O
+        if anum == 7 and atom.GetTotalNumHs() > 0:  atype = 'N'
+        if anum == 8 and atom.GetTotalNumHs() > 0:  atype = 'OA'
+
         try:
             charge = float(atom.GetPropsAsDict().get('_GasteigerCharge', 0.0))
-            if charge != charge:  # NaN check
-                charge = 0.0
+            if charge != charge: charge = 0.0  # NaN
         except:
             charge = 0.0
-        
-        line = (f"ATOM  {atom_idx:5d}  {symbol:<3s} LIG A   1    "
+
+        # Proper PDBQT HETATM format
+        # HETATM serial name resN chain seqN    X       Y       Z     occ   bfac   charge  type
+        name = f"{sym}{i+1}"[:4].ljust(4)
+        line = (f"HETATM{i+1:5d} {name} LIG A   1    "
                 f"{pos.x:8.3f}{pos.y:8.3f}{pos.z:8.3f}"
-                f"  1.00  0.00    {charge:6.3f} {ad_type}")
+                f"  1.00  0.00    {charge:+.3f} {atype}")
         lines.append(line)
-        atom_idx += 1
-    
+
+    lines.append("ENDROOT")
     lines.append("TORSDOF 0")
     return "\n".join(lines)
 
