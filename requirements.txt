@@ -6,6 +6,6 @@ scipy
 openpyxl
 rdkit
 gemmi
-meeko==0.5.0
+meeko==0.4.0
 py3Dmol==2.0.4
 matplotlib
