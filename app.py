@@ -725,8 +725,11 @@ with tab5:
         ligand_file = st.file_uploader("Upload Ligand (.pdbqt)", type=["pdbqt"], key="lig_upload")
         if ligand_file:
             os.makedirs("temp", exist_ok=True)
+            ligand_bytes = ligand_file.getbuffer()
             with open("temp/ligand.pdbqt", "wb") as f:
-                f.write(ligand_file.getbuffer())
+                f.write(ligand_bytes)
+            with open("ligand.pdbqt", "wb") as f:
+                f.write(ligand_bytes)
             ligand_pdbqt_ready = True
             st.success("✅ Ligand file ready!")
 
@@ -794,8 +797,12 @@ with tab5:
             with open("config.txt", "wb") as f:
                 f.write(config_file.getbuffer())
 
-            # Ligand path — temp/ligand.pdbqt already written above
-            ligand_path = "temp/ligand.pdbqt"
+            # Ligand path — use root level for Vina compatibility
+            ligand_path = "ligand.pdbqt"
+            # Copy from temp if needed
+            if not os.path.exists(ligand_path) and os.path.exists("temp/ligand.pdbqt"):
+                import shutil
+                shutil.copy("temp/ligand.pdbqt", "ligand.pdbqt")
             if not os.path.exists(ligand_path):
                 st.error("❌ Ligand file not found. Please upload or generate via Express Mode.")
                 st.stop()
@@ -820,7 +827,7 @@ with tab5:
                 cmd = [
                     vina_path,
                     "--receptor", "receptor.pdbqt",
-                    "--ligand", "ligand.pdbqt",
+                    "--ligand", ligand_path,
                     "--config", "config.txt",
                     "--out", "result_out.pdbqt"
                 ]
