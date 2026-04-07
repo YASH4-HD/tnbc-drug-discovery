@@ -1048,8 +1048,7 @@ with tab8:
                     import numpy as np
                     from scipy import stats
                     import matplotlib.pyplot as plt
-                    import io as BytesIO_io
-
+                    
                     progress = st.progress(0)
                     status = st.empty()
 
@@ -1249,7 +1248,7 @@ with tab8:
                         facecolor="#1a1a2e", labelcolor="white", fontsize=8)
 
             plt.tight_layout()
-            buf_v = BytesIO_io.BytesIO()
+            buf_v = io.BytesIO()
             fig_v.savefig(buf_v, format="png", dpi=150, bbox_inches="tight", facecolor="#0e1117")
             st.image(buf_v.getvalue(), use_column_width=True)
             plt.close(fig_v)
@@ -1296,7 +1295,7 @@ with tab8:
                 axes_flat[j].set_visible(False)
 
             plt.tight_layout()
-            buf_b = BytesIO_io.BytesIO()
+            buf_b = io.BytesIO()
             fig_b.savefig(buf_b, format="png", dpi=150, bbox_inches="tight", facecolor="#0e1117")
             st.image(buf_b.getvalue(), use_column_width=True)
             plt.close(fig_b)
@@ -1331,7 +1330,7 @@ with tab8:
             plt.setp(cbar.ax.yaxis.get_ticklabels(), color="white")
 
             plt.tight_layout()
-            buf_h = BytesIO_io.BytesIO()
+            buf_h = io.BytesIO()
             fig_h.savefig(buf_h, format="png", dpi=150, bbox_inches="tight", facecolor="#0e1117")
             st.image(buf_h.getvalue(), use_column_width=True)
             plt.close(fig_h)
