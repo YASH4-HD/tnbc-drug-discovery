@@ -45,6 +45,46 @@ try:
 except ImportError:
     MEEKO_AVAILABLE = False
 
+def mol_to_pdbqt_rdkit(mol):
+    """Pure RDKit fallback PDBQT writer — works without Meeko."""
+    from rdkit.Chem import AllChem, rdPartialCharges
+    try:
+        rdPartialCharges.ComputeGasteigerCharges(mol)
+    except:
+        pass
+    
+    lines = []
+    conf = mol.GetConformer()
+    atom_idx = 1
+    
+    # AutoDock atom type mapping
+    ad_types = {
+        6: 'C', 7: 'N', 8: 'O', 9: 'F', 15: 'P',
+        16: 'S', 17: 'Cl', 35: 'Br', 53: 'I', 1: 'H'
+    }
+    
+    for atom in mol.GetAtoms():
+        pos = conf.GetAtomPosition(atom.GetIdx())
+        symbol = atom.GetSymbol()
+        atomic_num = atom.GetAtomicNum()
+        ad_type = ad_types.get(atomic_num, symbol)
+        
+        try:
+            charge = float(atom.GetPropsAsDict().get('_GasteigerCharge', 0.0))
+            if charge != charge:  # NaN check
+                charge = 0.0
+        except:
+            charge = 0.0
+        
+        line = (f"ATOM  {atom_idx:5d}  {symbol:<3s} LIG A   1    "
+                f"{pos.x:8.3f}{pos.y:8.3f}{pos.z:8.3f}"
+                f"  1.00  0.00    {charge:6.3f} {ad_type}")
+        lines.append(line)
+        atom_idx += 1
+    
+    lines.append("TORSDOF 0")
+    return "\n".join(lines)
+
 # Page config
 st.set_page_config(
     page_title="TNBC Drug Discovery",
@@ -555,9 +595,7 @@ exhaustiveness = {exhaustiveness}
     st.subheader("B. Batch Ligand Conversion (SDF → PDBQT)")
     st.markdown("Upload your 3D minimized SDF files (from Tab 2). Uses **Meeko** to assign Gasteiger charges and AutoDock atom types.")
 
-    if not MEEKO_AVAILABLE:
-        st.error("❌ Meeko not installed. Add `meeko` to requirements.txt and redeploy.")
-    elif not RDKIT_AVAILABLE:
+    if not RDKIT_AVAILABLE:
         st.error("❌ RDKit not installed. Add `rdkit` to requirements.txt and redeploy.")
     else:
         uploaded_3d_sdfs = st.file_uploader(
@@ -716,9 +754,8 @@ with tab5:
                                 preparator.prepare(mol)
                                 pdbqt_string = preparator.write_pdbqt_string()
                             else:
-                                # Fallback: write SDF then note
-                                st.warning("⚠️ Meeko not available — saving as SDF. Convert to PDBQT manually.")
-                                pdbqt_string = Chem.MolToMolBlock(mol)
+                                pdbqt_string = mol_to_pdbqt_rdkit(mol)
+                                st.info("ℹ️ Used RDKit PDBQT writer (Meeko fallback)")
 
                             os.makedirs("temp", exist_ok=True)
                             with open("temp/ligand.pdbqt", "w") as f:
