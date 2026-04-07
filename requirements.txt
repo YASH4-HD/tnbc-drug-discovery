@@ -3,9 +3,7 @@ requests
 pandas
 numpy
 scipy
+matplotlib
 openpyxl
 rdkit
-gemmi
-meeko==0.4.0
 py3Dmol==2.0.4
-matplotlib
