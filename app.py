@@ -630,9 +630,12 @@ exhaustiveness = {exhaustiveness}
                         os.unlink(tmp_path)
 
                         if mol is not None:
-                            preparator = MoleculePreparation()
-                            preparator.prepare(mol)
-                            pdbqt_string = preparator.write_pdbqt_string()
+                            if MEEKO_AVAILABLE:
+                                preparator = MoleculePreparation()
+                                preparator.prepare(mol)
+                                pdbqt_string = preparator.write_pdbqt_string()
+                            else:
+                                pdbqt_string = mol_to_pdbqt_rdkit(mol)
                             pdbqt_files[f"{ligand_name}.pdbqt"] = pdbqt_string
                             st.success(f"✅ {ligand_name}.pdbqt — converted")
                         else:
