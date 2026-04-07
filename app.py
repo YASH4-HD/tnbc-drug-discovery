@@ -645,40 +645,120 @@ with tab5:
     with col1:
         st.info("""
         **Required files:**
-        - 🧬 Receptor PDBQT (from Tab 3 → cleaned, then converted externally)
-        - 💊 Ligand PDBQT (from Tab 4 → Section B output)
-        - ⚙️ Config TXT (from Tab 4 → Section A output)
+        - 🧬 Receptor PDBQT (from Tab 3)
+        - 💊 Ligand PDBQT (upload) **or** SMILES (Express Mode)
+        - ⚙️ Config TXT (from Tab 4 → Section A)
         """)
     with col2:
         st.warning("""
         **Note:** First run downloads Vina (~4MB). 
-        Docking takes **1-3 minutes** per ligand depending on exhaustiveness.
-        Results are the top binding poses ranked by ΔG (kcal/mol).
+        Docking takes **1-3 minutes** per ligand.
+        Results ranked by ΔG (kcal/mol) — more negative = stronger binding.
         """)
 
     st.markdown("---")
 
+    # Receptor + Config (always uploaded)
     receptor_file = st.file_uploader("🧬 Upload Receptor (PDBQT)", type=['pdbqt'], key="rec_upload")
-    ligand_file = st.file_uploader("💊 Upload Ligand (PDBQT)", type=['pdbqt'], key="lig_upload")
-    config_file = st.file_uploader("⚙️ Upload Config (TXT)", type=['txt'], key="conf_upload")
+    config_file   = st.file_uploader("⚙️ Upload Config (TXT)", type=['txt'], key="conf_upload")
 
-    # Show config preview
     if config_file:
         config_text = config_file.read().decode("utf-8")
         config_file.seek(0)
-        st.markdown("**Config preview:**")
-        st.code(config_text, language="text")
+        with st.expander("📄 Config preview"):
+            st.code(config_text, language="text")
+
+    st.markdown("---")
+
+    # ── Ligand Input Mode ──
+    st.subheader("💊 Ligand Input")
+    ligand_input_method = st.radio(
+        "Choose ligand input method:",
+        ["📁 Upload .pdbqt File", "🚀 Express Mode (Enter SMILES — auto 3D generation)"],
+        horizontal=True
+    )
+
+    ligand_pdbqt_ready = False
+
+    if ligand_input_method == "📁 Upload .pdbqt File":
+        ligand_file = st.file_uploader("Upload Ligand (.pdbqt)", type=["pdbqt"], key="lig_upload")
+        if ligand_file:
+            os.makedirs("temp", exist_ok=True)
+            with open("temp/ligand.pdbqt", "wb") as f:
+                f.write(ligand_file.getbuffer())
+            ligand_pdbqt_ready = True
+            st.success("✅ Ligand file ready!")
+
+    else:
+        smiles_input = st.text_input(
+            "Enter SMILES string:",
+            value="O=C1C=C(c2ccc(O)c(O)c2)Oc2cc(O)cc(O)c12",
+            help="Example: Luteolin (natural EGFR inhibitor)"
+        )
+        st.caption("💡 Get SMILES from PubChem → search compound → Canonical SMILES")
+
+        if st.button("⚙️ Generate 3D Ligand from SMILES", use_container_width=False):
+            if smiles_input and RDKIT_AVAILABLE:
+                try:
+                    with st.spinner("Building 3D geometry + MMFF94 energy minimization..."):
+                        mol = Chem.MolFromSmiles(smiles_input)
+                        if mol is None:
+                            st.error("❌ Invalid SMILES. Please check your input.")
+                        else:
+                            mol = Chem.AddHs(mol)
+                            result = AllChem.EmbedMolecule(mol, randomSeed=42)
+                            if result == -1:
+                                AllChem.EmbedMolecule(mol, AllChem.ETKDG())
+                            AllChem.MMFFOptimizeMolecule(mol)
+
+                            if MEEKO_AVAILABLE:
+                                preparator = MoleculePreparation()
+                                preparator.prepare(mol)
+                                pdbqt_string = preparator.write_pdbqt_string()
+                            else:
+                                # Fallback: write SDF then note
+                                st.warning("⚠️ Meeko not available — saving as SDF. Convert to PDBQT manually.")
+                                pdbqt_string = Chem.MolToMolBlock(mol)
+
+                            os.makedirs("temp", exist_ok=True)
+                            with open("temp/ligand.pdbqt", "w") as f:
+                                f.write(pdbqt_string)
+
+                            st.session_state["express_pdbqt"] = pdbqt_string
+                            st.success("✅ 3D Ligand generated and optimized! Ready for docking.")
+
+                            with st.expander("👀 View Generated PDBQT (first 500 chars)"):
+                                st.code(pdbqt_string[:500] + "\n...[truncated]...", language="text")
+
+                except Exception as e:
+                    st.error(f"⚠️ Error during conversion: {str(e)}")
+            elif not RDKIT_AVAILABLE:
+                st.error("❌ RDKit not installed.")
+            else:
+                st.warning("⚠️ Please enter a SMILES string first.")
+
+        # Check if express ligand is ready from previous generation
+        if "express_pdbqt" in st.session_state or os.path.exists("temp/ligand.pdbqt"):
+            ligand_pdbqt_ready = True
+            if "express_pdbqt" in st.session_state:
+                st.info("✅ Express ligand ready from SMILES — proceed to docking below.")
+
+    st.markdown("---")
 
     if st.button("🚀 Run AutoDock Vina Docking", use_container_width=True):
-        if receptor_file and ligand_file and config_file:
-            
-            # Save uploaded files to disk (Vina needs physical files)
+        if receptor_file and ligand_pdbqt_ready and config_file:
+
+            # Save receptor + config to disk
             with open("receptor.pdbqt", "wb") as f:
                 f.write(receptor_file.getbuffer())
-            with open("ligand.pdbqt", "wb") as f:
-                f.write(ligand_file.getbuffer())
             with open("config.txt", "wb") as f:
                 f.write(config_file.getbuffer())
+
+            # Ligand path — temp/ligand.pdbqt already written above
+            ligand_path = "temp/ligand.pdbqt"
+            if not os.path.exists(ligand_path):
+                st.error("❌ Ligand file not found. Please upload or generate via Express Mode.")
+                st.stop()
 
             vina_path = "./vina"
 
@@ -771,7 +851,11 @@ with tab5:
                     st.text_area("stdout:", process.stdout, height=200)
 
         else:
-            st.warning("⚠️ Please upload all 3 files: Receptor PDBQT, Ligand PDBQT, and Config TXT")
+            missing = []
+            if not receptor_file: missing.append("Receptor PDBQT")
+            if not ligand_pdbqt_ready: missing.append("Ligand (upload or generate via Express Mode)")
+            if not config_file: missing.append("Config TXT")
+            st.warning(f"⚠️ Missing: {', '.join(missing)}")
 
 
 with tab6:
