@@ -8,3 +8,4 @@ rdkit
 gemmi
 meeko==0.5.0
 py3Dmol==2.0.4
+matplotlib
