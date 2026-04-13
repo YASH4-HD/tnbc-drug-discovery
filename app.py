@@ -1541,7 +1541,7 @@ with tab9:
         st.warning("""
         **Why this matters:**
         - Luteolin already published for TNBC
-        - We want **untested compounds**
+        - Samit Sir wants **untested compounds**
         - Indian plants = underexplored chemical space
         - Novel compound = **publishable preprint**
         """)
@@ -1564,48 +1564,170 @@ with tab9:
 
     st.markdown("---")
 
-    # Manual compound input option
-    st.subheader("Option A: Manual Compound Entry")
-    st.markdown("Enter SMILES strings of Indian medicinal plant compounds to screen:")
+    # ── Session state for compound list ──
+    if "compound_list" not in st.session_state:
+        st.session_state["compound_list"] = [
+            {"name": "Berberine",       "smiles": "COc1ccc2cc3[n+](cc2c1OC)CCc1cc2c(cc1-3)OC(=O)O2", "source": "Berberis aristata"},
+            {"name": "Piperine",        "smiles": "O=C(/C=C/C=C/c1ccc2c(c1)OCO2)N1CCCCC1",           "source": "Piper nigrum"},
+            {"name": "Curcumin",        "smiles": "COc1cc(/C=C/C(=O)CC(=O)/C=C/c2ccc(O)c(OC)c2)ccc1O", "source": "Curcuma longa"},
+            {"name": "Andrographolide", "smiles": "O=C1OC[C@@]2(CO)CC[C@]3(C)[C@H](CC[C@@H]3[C@@H]2C1=C)[C@@H]1CC(=O)OC1", "source": "Andrographis paniculata"},
+            {"name": "Boswellic acid",  "smiles": "CC1(C)CCC2(CC1=O)[C@H](CC[C@@H]3[C@@]4(C)CCC(=O)C(C)(C)[C@@H]4CC[C@]23C)C(=O)O", "source": "Boswellia serrata"},
+            {"name": "Withaferin A",    "smiles": "C[C@@H]([C@H]1CC[C@@H]2[C@@H]1[C@@H](O)C[C@H]3[C@]2(CC[C@@H](O3)C(=O)C=C4C[C@H](O)C[C@@H](O)C4=O)C)OC(=O)C", "source": "Withania somnifera"},
+            {"name": "Nimbolide",       "smiles": "O=C1OC[C@H]2CC(=O)[C@H]3[C@@H](C2)[C@]4(C)CCC(=O)C(C)(C)[C@@H]4C[C@H]3O1", "source": "Azadirachta indica"},
+            {"name": "Colchicine",      "smiles": "COc1cc2c(cc1OC)-c1cc(OC)c(=O)cc1CC2NC(=O)C",     "source": "Colchicum autumnale"},
+            {"name": "Resveratrol",     "smiles": "Oc1ccc(/C=C/c2cc(O)cc(O)c2)cc1",                  "source": "Vitis vinifera"},
+            {"name": "Quercetin",       "smiles": "O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12",     "source": "Quercus robur"},
+            {"name": "Kaempferol",      "smiles": "O=c1c(O)c(-c2ccc(O)cc2)oc2cc(O)cc(O)c12",        "source": "Various plants"},
+            {"name": "Naringenin",      "smiles": "O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21",            "source": "Citrus species"},
+            {"name": "Apigenin",        "smiles": "O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12",           "source": "Petroselinum crispum"},
+            {"name": "Baicalein",       "smiles": "O=c1ccoc2cc(O)c(O)c(O)c12",                      "source": "Scutellaria baicalensis"},
+            {"name": "Phloretin",       "smiles": "OC1CC(=O)c2c(O)cc(O)cc2O1",                      "source": "Malus domestica"},
+        ]
 
-    default_compounds = """Berberine,COc1ccc2cc3[n+](cc2c1OC)CCc1cc2c(cc1-3)OC(=O)O2,Berberis aristata
-Piperine,O=C(/C=C/C=C/c1ccc2c(c1)OCO2)N1CCCCC1,Piper nigrum
-Curcumin,COc1cc(/C=C/C(=O)CC(=O)/C=C/c2ccc(O)c(OC)c2)ccc1O,Curcuma longa
-Andrographolide,O=C1OC[C@@]2(CO)CC[C@]3(C)[C@H](CC[C@@H]3[C@@H]2C1=C)[C@@H]1CC(=O)OC1,Andrographis paniculata
-Boswellic acid,CC1(C)CCC2(CC1=O)[C@H](CC[C@@H]3[C@@]4(C)CCC(=O)C(C)(C)[C@@H]4CC[C@]23C)C(=O)O,Boswellia serrata
-Withaferin A,C[C@@H]([C@H]1CC[C@@H]2[C@@H]1[C@@H](O)C[C@H]3[C@]2(CC[C@@H](O3)C(=O)C=C4C[C@H](O)C[C@@H](O)C4=O)C)OC(=O)C,Withania somnifera
-Nimbolide,O=C1OC[C@H]2CC(=O)[C@H]3[C@@H](C2)[C@]4(C)CCC(=O)C(C)(C)[C@@H]4C[C@H]3O1,Azadirachta indica
-Colchicine,COc1cc2c(cc1OC)-c1cc(OC)c(=O)cc1CC2NC(=O)C,Colchicum autumnale
-Resveratrol,Oc1ccc(/C=C/c2cc(O)cc(O)c2)cc1,Vitis vinifera
-Epigallocatechin,OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O,Camellia sinensis
-Quercetin,O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12,Quercus robur
-Kaempferol,O=c1c(O)c(-c2ccc(O)cc2)oc2cc(O)cc(O)c12,Various plants
-Naringenin,O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21,Citrus species
-Apigenin,O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12,Petroselinum crispum
-Baicalein,O=c1ccoc2cc(O)c(O)c(O)c12,Scutellaria baicalensis"""
+    # ── Option A: PubChem Search — add compound by name ──
+    st.subheader("🔎 Option A: Search & Add Compound (PubChem)")
+    st.markdown("Type any compound name → auto-fetch SMILES from PubChem → add to screening list")
 
-    compounds_input = st.text_area(
-        "Format: Name,SMILES,Plant Source (one per line)",
-        value=default_compounds,
-        height=200
-    )
+    col1, col2, col3 = st.columns([3, 1, 2])
+    with col1:
+        search_name = st.text_input(
+            "Compound name:",
+            placeholder="e.g. Thymoquinone, Emodin, Gallic acid, Carvacrol...",
+            key="pubchem_search"
+        )
+    with col2:
+        plant_source = st.text_input("Plant source:", placeholder="e.g. Nigella sativa", key="plant_src")
+    with col3:
+        fetch_btn = st.button("🔍 Fetch from PubChem & Add", use_container_width=True)
+
+    if fetch_btn and search_name:
+        with st.spinner(f"Fetching {search_name} from PubChem..."):
+            try:
+                import requests as req
+                # PubChem REST API — get canonical SMILES
+                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{search_name.replace(' ', '%20')}/property/CanonicalSMILES,IUPACName,MolecularWeight/JSON"
+                r = req.get(url, timeout=10)
+                if r.status_code == 200:
+                    props = r.json()["PropertyTable"]["Properties"][0]
+                    smiles = props.get("CanonicalSMILES", "")
+                    iupac  = props.get("IUPACName", search_name)
+                    mw     = props.get("MolecularWeight", "?")
+
+                    # Check if already in list
+                    existing = [c["name"].lower() for c in st.session_state["compound_list"]]
+                    if search_name.lower() not in existing:
+                        st.session_state["compound_list"].append({
+                            "name":   search_name,
+                            "smiles": smiles,
+                            "source": plant_source or "PubChem fetch"
+                        })
+                        st.success(f"✅ Added **{search_name}** | MW: {mw} Da | SMILES: {smiles[:50]}...")
+                    else:
+                        st.info(f"ℹ️ {search_name} already in list.")
+                else:
+                    st.error(f"❌ Not found in PubChem. Check spelling.")
+            except Exception as e:
+                st.error(f"❌ PubChem fetch failed: {str(e)}")
 
     st.markdown("---")
-    st.subheader("Option B: IMPPAT Database (Live Fetch)")
-    st.markdown("Fetch directly from Indian Medicinal Plants, Phytochemistry and Therapeutics database")
 
-    imppat_plant = st.text_input(
-        "Search plant name in IMPPAT:",
-        placeholder="e.g. Withania somnifera, Azadirachta indica",
-        help="IMPPAT has 17,000+ compounds from 1742 Indian medicinal plants"
-    )
+    # ── Option B: Manual add ──
+    st.subheader("✏️ Option B: Add Manually (Paste SMILES)")
+    col1, col2, col3 = st.columns([2, 3, 2])
+    with col1:
+        manual_name   = st.text_input("Compound name", key="manual_name")
+    with col2:
+        manual_smiles = st.text_input("SMILES string", key="manual_smiles",
+                                      placeholder="Paste from PubChem / ChemDraw")
+    with col3:
+        manual_source = st.text_input("Plant source", key="manual_source")
 
     col1, col2 = st.columns(2)
     with col1:
-        run_manual = st.button("🔬 Screen Manual Compounds", use_container_width=True)
+        if st.button("➕ Add to List", use_container_width=True):
+            if manual_name and manual_smiles:
+                existing = [c["name"].lower() for c in st.session_state["compound_list"]]
+                if manual_name.lower() not in existing:
+                    st.session_state["compound_list"].append({
+                        "name": manual_name,
+                        "smiles": manual_smiles,
+                        "source": manual_source or "Manual entry"
+                    })
+                    st.success(f"✅ Added {manual_name}")
+                else:
+                    st.warning(f"⚠️ {manual_name} already in list")
+            else:
+                st.warning("Name aur SMILES dono chahiye")
     with col2:
-        run_imppat = st.button("🌿 Fetch & Screen from IMPPAT", use_container_width=True,
-                               disabled=not imppat_plant)
+        if st.button("🗑️ Clear Entire List", use_container_width=True):
+            st.session_state["compound_list"] = []
+            st.success("List cleared!")
+
+    st.markdown("---")
+
+    # ── Option C: IMPPAT Live Fetch ──
+    st.subheader("🌿 Option C: Fetch from IMPPAT Database")
+    imppat_plant = st.text_input(
+        "Indian plant name:",
+        placeholder="e.g. Withania somnifera, Azadirachta indica, Tinospora cordifolia",
+        help="IMPPAT has 17,000+ compounds from 1742 Indian medicinal plants"
+    )
+    if st.button("🌿 Fetch from IMPPAT & Add to List", use_container_width=False,
+                 disabled=not imppat_plant):
+        with st.spinner(f"Fetching from IMPPAT: {imppat_plant}..."):
+            try:
+                import requests as req
+                url = f"https://imppat.iicb.res.in/api/compounds?plant={imppat_plant.replace(' ', '+')}&limit=50"
+                r = req.get(url, timeout=15)
+                added = 0
+                if r.status_code == 200:
+                    for comp in r.json().get("compounds", []):
+                        if comp.get("smiles"):
+                            existing = [c["name"].lower() for c in st.session_state["compound_list"]]
+                            if comp["name"].lower() not in existing:
+                                st.session_state["compound_list"].append({
+                                    "name": comp["name"],
+                                    "smiles": comp["smiles"],
+                                    "source": imppat_plant
+                                })
+                                added += 1
+                    st.success(f"✅ Added {added} compounds from IMPPAT for {imppat_plant}")
+                else:
+                    st.error("IMPPAT API unavailable. Use PubChem search instead.")
+            except Exception as e:
+                st.error(f"❌ IMPPAT fetch failed: {str(e)}")
+
+    st.markdown("---")
+
+    # ── Current List Display ──
+    st.subheader(f"📋 Current Screening List ({len(st.session_state['compound_list'])} compounds)")
+    if st.session_state["compound_list"]:
+        list_df = pd.DataFrame(st.session_state["compound_list"])[["name", "source", "smiles"]]
+        list_df.columns = ["Compound", "Plant Source", "SMILES"]
+        list_df["SMILES"] = list_df["SMILES"].apply(lambda x: x[:40] + "..." if len(x) > 40 else x)
+
+        # Delete individual compounds
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            st.dataframe(list_df, use_container_width=True, hide_index=True)
+        with col2:
+            del_name = st.selectbox("Remove compound:", ["—"] + [c["name"] for c in st.session_state["compound_list"]])
+            if st.button("🗑️ Remove", use_container_width=True) and del_name != "—":
+                st.session_state["compound_list"] = [c for c in st.session_state["compound_list"] if c["name"] != del_name]
+                st.success(f"Removed {del_name}")
+                st.rerun()
+    else:
+        st.info("List empty — add compounds using options above.")
+
+    st.markdown("---")
+
+    # Run screening on current list
+    col1, col2 = st.columns(2)
+    with col1:
+        run_manual = st.button("🔬 Screen All Compounds in List", use_container_width=True,
+                               disabled=len(st.session_state.get("compound_list", [])) == 0)
+    with col2:
+        run_imppat = False  # kept for compatibility below
 
     if run_manual or run_imppat:
         if not RDKIT_AVAILABLE:
@@ -1614,15 +1736,8 @@ Baicalein,O=c1ccoc2cc(O)c(O)c(O)c12,Scutellaria baicalensis"""
             compounds_to_screen = []
 
             if run_manual:
-                # Parse manual input
-                for line in compounds_input.strip().split("\n"):
-                    parts = [p.strip() for p in line.split(",")]
-                    if len(parts) >= 2:
-                        compounds_to_screen.append({
-                            "name": parts[0],
-                            "smiles": parts[1],
-                            "source": parts[2] if len(parts) > 2 else "Unknown"
-                        })
+                # Use session state compound list
+                compounds_to_screen = list(st.session_state.get("compound_list", []))
 
             elif run_imppat:
                 with st.spinner(f"Fetching compounds for {imppat_plant} from IMPPAT..."):
