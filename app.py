@@ -1541,7 +1541,7 @@ with tab9:
         st.warning("""
         **Why this matters:**
         - Luteolin already published for TNBC
-        - Samit Sir wants **untested compounds**
+        - We want **untested compounds**
         - Indian plants = underexplored chemical space
         - Novel compound = **publishable preprint**
         """)
