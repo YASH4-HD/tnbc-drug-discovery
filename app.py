@@ -1610,6 +1610,53 @@ with tab9:
     (3) Compete with Taxol/Carboplatin (4) Low toxicity vs chemo
     """)
 
+    # ── NOVEL CANDIDATES BOX ──
+    st.markdown("""
+    <div style="background:#0a2a0a; border-left:4px solid #4bff91; padding:15px; border-radius:5px; margin:10px 0;">
+        <h4 style="color:#4bff91; margin:0;">🏆 Literature-Validated Novel Candidates (AnswerThis verified)</h4>
+        <p style="color:white; margin:8px 0 4px 0;">
+        <b>Primary: 3-Cl-4-CN Chalcone</b> — Dual Cl+CN substitution NOT reported in TNBC<br>
+        Mechanism: Cl→ROS+apoptosis | CN→EGFR | Chalcone→Tubulin inhibition | Single-step synthesis<br>
+        SMILES: <code>O=C(/C=C/c1ccc(C#N)c(Cl)c1)c1ccccc1</code>
+        </p>
+        <p style="color:white; margin:4px 0;">
+        <b>Secondary: CN-Pyridine Chalcone</b> — Pyridine+Cyano combination NOT reported in TNBC<br>
+        Mechanism: CN→EGFR | Pyridine→JAK/STAT | Chalcone→Tubulin | Multi-target scaffold<br>
+        SMILES: <code>O=C(/C=C/c1ccc(C#N)cc1)c1ccccn1</code>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col_nov1, col_nov2, col_nov3 = st.columns(3)
+    with col_nov1:
+        if st.button("🏆 Add 3-Cl-4-CN Chalcone", use_container_width=True):
+            comp = {"name": "3-Cl-4-CN-Chalcone", "smiles": "O=C(/C=C/c1ccc(C#N)c(Cl)c1)c1ccccc1", "source": "Novel synthetic — AnswerThis verified"}
+            existing = [c["name"].lower() for c in st.session_state.get("compound_list", [])]
+            if comp["name"].lower() not in existing:
+                st.session_state.setdefault("compound_list", []).insert(0, comp)
+                st.success("✅ Added as #1 priority!")
+                st.rerun()
+    with col_nov2:
+        if st.button("🧠 Add CN-Pyridine Chalcone", use_container_width=True):
+            comp = {"name": "CN-Pyridine-Chalcone", "smiles": "O=C(/C=C/c1ccc(C#N)cc1)c1ccccn1", "source": "Novel synthetic — AnswerThis verified"}
+            existing = [c["name"].lower() for c in st.session_state.get("compound_list", [])]
+            if comp["name"].lower() not in existing:
+                st.session_state.setdefault("compound_list", []).insert(1, comp)
+                st.success("✅ Added as #2 priority!")
+                st.rerun()
+    with col_nov3:
+        if st.button("⚡ Add Both + Screen Now", use_container_width=True):
+            novel_two = [
+                {"name": "3-Cl-4-CN-Chalcone",   "smiles": "O=C(/C=C/c1ccc(C#N)c(Cl)c1)c1ccccc1",  "source": "Novel synthetic — AnswerThis verified"},
+                {"name": "CN-Pyridine-Chalcone",  "smiles": "O=C(/C=C/c1ccc(C#N)cc1)c1ccccn1",      "source": "Novel synthetic — AnswerThis verified"},
+            ]
+            existing_names = [c["name"].lower() for c in st.session_state.get("compound_list", [])]
+            for c in novel_two:
+                if c["name"].lower() not in existing_names:
+                    st.session_state.setdefault("compound_list", []).insert(0, c)
+            st.success("✅ Both added at top of list!")
+            st.rerun()
+
     # Quick Chalcone loader
     col1, col2 = st.columns(2)
     with col1:
