@@ -1794,35 +1794,34 @@ with tab9:
                     source = comp["source"]
                     status.text(f"Step 1/2: PubMed check — {name} ({i+1}/{min(len(compounds_to_screen), max_compounds)})")
 
-                    # ── PubMed Novelty Check (Multi-synonym) ──
-                    # Problem: "TNBC" alone misses papers using cell line names,
-                    # synonyms, or alternate terminology (Synonym Drop-out Problem)
+                    # ── PubMed Novelty Check (Multi-synonym, proper URL encoding) ──
                     pubmed_count = 0
                     pubmed_details = []
                     try:
                         import requests as req
+                        from urllib.parse import quote
 
-                        # Comprehensive TNBC synonym query
-                        tnbc_synonyms = (
-                            '"Triple Negative Breast Cancer"[tiab] OR '
-                            '"TNBC"[tiab] OR '
-                            '"triple-negative breast"[tiab] OR '
-                            '"MDA-MB-231"[tiab] OR '
-                            '"MDA-MB-468"[tiab] OR '
-                            '"BT-549"[tiab] OR '
-                            '"basal-like breast"[tiab] OR '
-                            '"ER-negative breast"[tiab] OR '
-                            '"estrogen receptor negative breast"[tiab]'
+                        # Comprehensive TNBC synonym query — NO quotes in field tags
+                        # Use urllib.parse.quote for proper encoding
+                        tnbc_part = (
+                            "Triple+Negative+Breast+Cancer[tiab]+"
+                            "OR+TNBC[tiab]+"
+                            "OR+triple-negative+breast[tiab]+"
+                            "OR+MDA-MB-231[tiab]+"
+                            "OR+MDA-MB-468[tiab]+"
+                            "OR+BT-549[tiab]+"
+                            "OR+basal-like+breast+cancer[tiab]+"
+                            "OR+ER-negative+breast[tiab]+"
+                            "OR+estrogen+receptor+negative+breast[tiab]"
                         )
 
-                        # Search with full synonym expansion
-                        compound_term = f'"{name}"[tiab] OR "{name}"[nm]'
-                        full_query = f"({compound_term}) AND ({tnbc_synonyms})"
+                        # Compound name — URL encode properly
+                        comp_encoded = quote(name)
+                        full_term = f"{comp_encoded}[tiab]+AND+({tnbc_part})"
 
                         pubmed_url = (
                             f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-                            f"?db=pubmed&term={full_query.replace(' ', '+').replace('[', '%5B').replace(']', '%5D').replace('"', '%22')}"
-                            f"&retmax=3&retmode=json"
+                            f"?db=pubmed&term={full_term}&retmax=3&retmode=json"
                         )
                         pr = req.get(pubmed_url, timeout=12)
                         if pr.status_code == 200:
@@ -1830,11 +1829,12 @@ with tab9:
                             pubmed_count = int(result.get("count", 0))
                             pubmed_ids = result.get("idlist", [])
 
-                            # Fetch titles of found papers for transparency
+                            # Fetch paper titles for transparency
                             if pubmed_ids:
+                                ids_str = ",".join(pubmed_ids[:3])
                                 titles_url = (
                                     f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
-                                    f"?db=pubmed&id={','.join(pubmed_ids)}&retmode=json"
+                                    f"?db=pubmed&id={ids_str}&retmode=json"
                                 )
                                 tr = req.get(titles_url, timeout=10)
                                 if tr.status_code == 200:
@@ -1843,7 +1843,7 @@ with tab9:
                                         if title:
                                             pubmed_details.append(title[:100])
 
-                    except:
+                    except Exception as e:
                         pubmed_count = -1  # API error
 
                     # Store details for display
