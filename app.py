@@ -1794,20 +1794,60 @@ with tab9:
                     source = comp["source"]
                     status.text(f"Step 1/2: PubMed check — {name} ({i+1}/{min(len(compounds_to_screen), max_compounds)})")
 
-                    # ── PubMed Novelty Check ──
+                    # ── PubMed Novelty Check (Multi-synonym) ──
+                    # Problem: "TNBC" alone misses papers using cell line names,
+                    # synonyms, or alternate terminology (Synonym Drop-out Problem)
                     pubmed_count = 0
+                    pubmed_details = []
                     try:
                         import requests as req
+
+                        # Comprehensive TNBC synonym query
+                        tnbc_synonyms = (
+                            '"Triple Negative Breast Cancer"[tiab] OR '
+                            '"TNBC"[tiab] OR '
+                            '"triple-negative breast"[tiab] OR '
+                            '"MDA-MB-231"[tiab] OR '
+                            '"MDA-MB-468"[tiab] OR '
+                            '"BT-549"[tiab] OR '
+                            '"basal-like breast"[tiab] OR '
+                            '"ER-negative breast"[tiab] OR '
+                            '"estrogen receptor negative breast"[tiab]'
+                        )
+
+                        # Search with full synonym expansion
+                        compound_term = f'"{name}"[tiab] OR "{name}"[nm]'
+                        full_query = f"({compound_term}) AND ({tnbc_synonyms})"
+
                         pubmed_url = (
                             f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-                            f"?db=pubmed&term={name.replace(' ', '+')}+AND+({search_query.replace(' ', '+')})"
-                            f"&retmax=1&retmode=json"
+                            f"?db=pubmed&term={full_query.replace(' ', '+').replace('[', '%5B').replace(']', '%5D').replace('"', '%22')}"
+                            f"&retmax=3&retmode=json"
                         )
-                        pr = req.get(pubmed_url, timeout=10)
+                        pr = req.get(pubmed_url, timeout=12)
                         if pr.status_code == 200:
-                            pubmed_count = int(pr.json().get("esearchresult", {}).get("count", 999))
+                            result = pr.json().get("esearchresult", {})
+                            pubmed_count = int(result.get("count", 0))
+                            pubmed_ids = result.get("idlist", [])
+
+                            # Fetch titles of found papers for transparency
+                            if pubmed_ids:
+                                titles_url = (
+                                    f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+                                    f"?db=pubmed&id={','.join(pubmed_ids)}&retmode=json"
+                                )
+                                tr = req.get(titles_url, timeout=10)
+                                if tr.status_code == 200:
+                                    for uid in pubmed_ids[:3]:
+                                        title = tr.json().get("result", {}).get(uid, {}).get("title", "")
+                                        if title:
+                                            pubmed_details.append(title[:100])
+
                     except:
-                        pubmed_count = -1  # API error — mark as unknown
+                        pubmed_count = -1  # API error
+
+                    # Store details for display
+                    comp["pubmed_details"] = pubmed_details
 
                     # ── Lipinski Filter ──
                     try:
@@ -1828,7 +1868,8 @@ with tab9:
                                 "Compound": name,
                                 "Plant Source": source,
                                 "PubMed (TNBC)": pubmed_count if pubmed_count >= 0 else "API err",
-                                "Novel?": "✅ YES" if pubmed_count == 0 else ("⚠️ Unknown" if pubmed_count < 0 else f"❌ {pubmed_count} papers"),
+                                "Novel?": "✅ YES" if pubmed_count == 0 else ("⚠️ API err" if pubmed_count < 0 else f"❌ {pubmed_count} papers"),
+                            "Papers Found": "; ".join(comp.get("pubmed_details", []))[:120] if pubmed_count > 0 else "—",
                                 "MW": round(mw, 1),
                                 "LogP": round(logp, 2),
                                 "HBD": hbd,
@@ -1838,7 +1879,7 @@ with tab9:
                                 "Druglike?": "✅ Yes" if lipinski_ok else "❌ No",
                                 "SMILES": smiles,
                                 "Priority": "🔥 HIGH" if (pubmed_count == 0 and lipinski_ok) else
-                                           ("🟡 MEDIUM" if (pubmed_count <= 2 and lipinski_ok) else "⬇️ LOW")
+                                           ("🟡 MEDIUM" if (pubmed_count <= 3 and lipinski_ok) else "⬇️ LOW")
                             })
                         else:
                             results.append({
