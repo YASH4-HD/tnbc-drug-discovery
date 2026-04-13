@@ -1578,7 +1578,7 @@ with tab9:
         st.warning("""
         **Why this matters:**
         - Luteolin already published for TNBC
-        - Samit Sir wants **untested compounds**
+        - Goal: find **untested compounds**
         - Indian plants = underexplored chemical space
         - Novel compound = **publishable preprint**
         """)
@@ -1606,7 +1606,7 @@ with tab9:
     🎯 **Target:** Find compounds that can **compete with Taxol (Paclitaxel, -9.2 kcal/mol vs Tubulin)** 
     and **Carboplatin** — small molecules, easy lab synthesis (SA Score ≤ 4), low toxicity.
     
-    **Samit Sir's criteria:** (1) Small molecule — lab synthesizable (2) Tumor size reduction 
+    **Target criteria:** (1) Small molecule — lab synthesizable (2) Tumor size reduction 
     (3) Compete with Taxol/Carboplatin (4) Low toxicity vs chemo
     """)
 
