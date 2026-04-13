@@ -1794,59 +1794,89 @@ with tab9:
                     source = comp["source"]
                     status.text(f"Step 1/2: PubMed check — {name} ({i+1}/{min(len(compounds_to_screen), max_compounds)})")
 
-                    # ── PubMed Novelty Check (Multi-synonym, proper URL encoding) ──
+                    # ── PubMed Novelty Check — 3-pass approach ──
+                    # Pass 1: Compound name [tiab] + TNBC synonyms
+                    # Pass 2: PubChem CID → MeSH/synonym fetch → search again  
+                    # Pass 3: Compound [Substance Name] registry search
                     pubmed_count = 0
                     pubmed_details = []
                     try:
                         import requests as req
                         from urllib.parse import quote
 
-                        # Comprehensive TNBC synonym query — NO quotes in field tags
-                        # Use urllib.parse.quote for proper encoding
                         tnbc_part = (
-                            "Triple+Negative+Breast+Cancer[tiab]+"
-                            "OR+TNBC[tiab]+"
-                            "OR+triple-negative+breast[tiab]+"
-                            "OR+MDA-MB-231[tiab]+"
-                            "OR+MDA-MB-468[tiab]+"
-                            "OR+BT-549[tiab]+"
-                            "OR+basal-like+breast+cancer[tiab]+"
-                            "OR+ER-negative+breast[tiab]+"
-                            "OR+estrogen+receptor+negative+breast[tiab]"
+                            "Triple+Negative+Breast+Cancer[tiab]"
+                            "+OR+TNBC[tiab]"
+                            "+OR+triple-negative+breast[tiab]"
+                            "+OR+MDA-MB-231[tiab]"
+                            "+OR+MDA-MB-468[tiab]"
+                            "+OR+BT-549[tiab]"
+                            "+OR+basal-like+breast+cancer[tiab]"
+                            "+OR+ER-negative+breast[tiab]"
                         )
 
-                        # Compound name — URL encode properly
-                        comp_encoded = quote(name)
-                        full_term = f"{comp_encoded}[tiab]+AND+({tnbc_part})"
+                        def search_pubmed(compound_name):
+                            """Search PubMed for compound + TNBC, return count + ids."""
+                            enc = quote(compound_name)
+                            # Search tiab + substance name registry
+                            term = f"({enc}[tiab]+OR+{enc}[nm])+AND+({tnbc_part})"
+                            url = (
+                                f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+                                f"?db=pubmed&term={term}&retmax=3&retmode=json"
+                            )
+                            r = req.get(url, timeout=12)
+                            if r.status_code == 200:
+                                res = r.json().get("esearchresult", {})
+                                return int(res.get("count", 0)), res.get("idlist", [])
+                            return 0, []
 
-                        pubmed_url = (
-                            f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
-                            f"?db=pubmed&term={full_term}&retmax=3&retmode=json"
-                        )
-                        pr = req.get(pubmed_url, timeout=12)
-                        if pr.status_code == 200:
-                            result = pr.json().get("esearchresult", {})
-                            pubmed_count = int(result.get("count", 0))
-                            pubmed_ids = result.get("idlist", [])
+                        def get_pubchem_synonyms(compound_name):
+                            """Get top synonyms from PubChem for a compound."""
+                            try:
+                                url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{quote(compound_name)}/synonyms/JSON"
+                                r = req.get(url, timeout=8)
+                                if r.status_code == 200:
+                                    syns = r.json()["InformationList"]["Information"][0].get("Synonym", [])
+                                    # Return short common synonyms only (avoid IUPAC names)
+                                    short_syns = [s for s in syns if len(s) < 30 and s != compound_name][:5]
+                                    return short_syns
+                            except:
+                                pass
+                            return []
 
-                            # Fetch paper titles for transparency
-                            if pubmed_ids:
-                                ids_str = ",".join(pubmed_ids[:3])
-                                titles_url = (
-                                    f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
-                                    f"?db=pubmed&id={ids_str}&retmode=json"
-                                )
-                                tr = req.get(titles_url, timeout=10)
-                                if tr.status_code == 200:
-                                    for uid in pubmed_ids[:3]:
-                                        title = tr.json().get("result", {}).get(uid, {}).get("title", "")
-                                        if title:
-                                            pubmed_details.append(title[:100])
+                        # Pass 1 — direct name search
+                        count1, ids1 = search_pubmed(name)
+                        pubmed_count = count1
+                        all_ids = ids1
+
+                        # Pass 2 — synonym search via PubChem
+                        if pubmed_count == 0:
+                            synonyms = get_pubchem_synonyms(name)
+                            for syn in synonyms:
+                                c, ids = search_pubmed(syn)
+                                if c > 0:
+                                    pubmed_count = max(pubmed_count, c)
+                                    all_ids = ids
+                                    pubmed_details.append(f"[Found via synonym: {syn}]")
+                                    break  # found — stop
+
+                        # Fetch paper titles
+                        if all_ids:
+                            ids_str = ",".join(all_ids[:3])
+                            titles_url = (
+                                f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+                                f"?db=pubmed&id={ids_str}&retmode=json"
+                            )
+                            tr = req.get(titles_url, timeout=10)
+                            if tr.status_code == 200:
+                                for uid in all_ids[:3]:
+                                    title = tr.json().get("result", {}).get(uid, {}).get("title", "")
+                                    if title and not title.startswith("[Found"):
+                                        pubmed_details.append(title[:100])
 
                     except Exception as e:
-                        pubmed_count = -1  # API error
+                        pubmed_count = -1
 
-                    # Store details for display
                     comp["pubmed_details"] = pubmed_details
 
                     # ── Lipinski Filter ──
