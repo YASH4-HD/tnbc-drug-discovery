@@ -189,7 +189,7 @@ st.markdown('<div class="subheader">STRING-db Target Discovery for Triple Negati
 st.markdown("---")
 
 # Tabs
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking", "🔬 3D Visualization", "💊 ADMET Analysis", "📊 TCGA Expression"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9 = st.tabs(["🔍 Target Discovery", "💊 3D Ligand Preparation", "🧪 Protein Prep", "⚗️ Docking Prep", "🚀 Run Docking", "🔬 3D Visualization", "💊 ADMET Analysis", "📊 TCGA Expression", "🌿 Novel Compound Discovery"])
 
 with tab1:
     # Main content
@@ -742,10 +742,16 @@ with tab5:
         if ligand_file:
             os.makedirs("temp", exist_ok=True)
             ligand_bytes = ligand_file.getbuffer()
+            # Force overwrite — remove stale files first
+            for _p in ["temp/ligand.pdbqt", "ligand.pdbqt"]:
+                if os.path.exists(_p):
+                    os.remove(_p)
             with open("temp/ligand.pdbqt", "wb") as f:
                 f.write(ligand_bytes)
             with open("ligand.pdbqt", "wb") as f:
                 f.write(ligand_bytes)
+            # Store in session state so it persists
+            st.session_state["ligand_pdbqt_bytes"] = ligand_bytes
             ligand_pdbqt_ready = True
             st.success("✅ Ligand file ready!")
 
@@ -813,12 +819,17 @@ with tab5:
             with open("config.txt", "wb") as f:
                 f.write(config_file.getbuffer())
 
-            # Ligand path — use root level for Vina compatibility
+            # Ligand path — always write fresh from session state before docking
             ligand_path = "ligand.pdbqt"
-            # Copy from temp if needed
-            if not os.path.exists(ligand_path) and os.path.exists("temp/ligand.pdbqt"):
+            if "ligand_pdbqt_bytes" in st.session_state:
+                with open(ligand_path, "wb") as f:
+                    f.write(st.session_state["ligand_pdbqt_bytes"])
+            elif "express_pdbqt" in st.session_state:
+                with open(ligand_path, "w") as f:
+                    f.write(st.session_state["express_pdbqt"])
+            elif os.path.exists("temp/ligand.pdbqt"):
                 import shutil
-                shutil.copy("temp/ligand.pdbqt", "ligand.pdbqt")
+                shutil.copy("temp/ligand.pdbqt", ligand_path)
             if not os.path.exists(ligand_path):
                 st.error("❌ Ligand file not found. Please upload or generate via Express Mode.")
                 st.stop()
@@ -1504,6 +1515,288 @@ with tab8:
             (TCGA 2012 *Nature*; UCSC Xena portal). GDC API used for metadata; 
             per-sample counts require authenticated bulk download. 
             All statistical comparisons: Mann-Whitney U test.
+            """)
+
+
+with tab9:
+    st.markdown("### 🌿 Novel Compound Discovery Pipeline")
+    st.markdown("""
+    **Goal:** Find Indian medicinal plant compounds with **zero prior TNBC research** — 
+    genuinely novel candidates for drug discovery.
+    
+    **Workflow:** IMPPAT database → PubMed novelty filter → Lipinski Ro5 → AutoDock Vina ready
+    """)
+
+    col1, col2 = st.columns([3, 2])
+    with col1:
+        st.info("""
+        **Pipeline steps:**
+        1. 🌿 Fetch compounds from IMPPAT (Indian Medicinal Plants database)
+        2. 🔬 PubMed API — check if compound + TNBC has any publications
+        3. ✅ Zero results = **Novel candidate** — no one has studied it for TNBC
+        4. 💊 RDKit Lipinski filter — druggable compounds only
+        5. 📊 Ranked shortlist ready for docking (Tab 5)
+        """)
+    with col2:
+        st.warning("""
+        **Why this matters:**
+        - Luteolin already published for TNBC
+        - Samit Sir wants **untested compounds**
+        - Indian plants = underexplored chemical space
+        - Novel compound = **publishable preprint**
+        """)
+
+    st.markdown("---")
+
+    # Configuration
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        search_query = st.text_input(
+            "PubMed search term for novelty check:",
+            value="TNBC OR triple negative breast cancer",
+            help="Compound name + this term = novelty check"
+        )
+    with col2:
+        max_compounds = st.slider("Max compounds to screen", 10, 200, 50, step=10)
+    with col3:
+        mw_cutoff = st.number_input("Max MW (Da)", value=500, step=50)
+        logp_cutoff = st.number_input("Max LogP", value=5.0, step=0.5)
+
+    st.markdown("---")
+
+    # Manual compound input option
+    st.subheader("Option A: Manual Compound Entry")
+    st.markdown("Enter SMILES strings of Indian medicinal plant compounds to screen:")
+
+    default_compounds = """Berberine,COc1ccc2cc3[n+](cc2c1OC)CCc1cc2c(cc1-3)OC(=O)O2,Berberis aristata
+Piperine,O=C(/C=C/C=C/c1ccc2c(c1)OCO2)N1CCCCC1,Piper nigrum
+Curcumin,COc1cc(/C=C/C(=O)CC(=O)/C=C/c2ccc(O)c(OC)c2)ccc1O,Curcuma longa
+Andrographolide,O=C1OC[C@@]2(CO)CC[C@]3(C)[C@H](CC[C@@H]3[C@@H]2C1=C)[C@@H]1CC(=O)OC1,Andrographis paniculata
+Boswellic acid,CC1(C)CCC2(CC1=O)[C@H](CC[C@@H]3[C@@]4(C)CCC(=O)C(C)(C)[C@@H]4CC[C@]23C)C(=O)O,Boswellia serrata
+Withaferin A,C[C@@H]([C@H]1CC[C@@H]2[C@@H]1[C@@H](O)C[C@H]3[C@]2(CC[C@@H](O3)C(=O)C=C4C[C@H](O)C[C@@H](O)C4=O)C)OC(=O)C,Withania somnifera
+Nimbolide,O=C1OC[C@H]2CC(=O)[C@H]3[C@@H](C2)[C@]4(C)CCC(=O)C(C)(C)[C@@H]4C[C@H]3O1,Azadirachta indica
+Colchicine,COc1cc2c(cc1OC)-c1cc(OC)c(=O)cc1CC2NC(=O)C,Colchicum autumnale
+Resveratrol,Oc1ccc(/C=C/c2cc(O)cc(O)c2)cc1,Vitis vinifera
+Epigallocatechin,OC[C@H]1OC(O)[C@H](O)[C@@H](O)[C@@H]1O,Camellia sinensis
+Quercetin,O=c1c(O)c(-c2ccc(O)c(O)c2)oc2cc(O)cc(O)c12,Quercus robur
+Kaempferol,O=c1c(O)c(-c2ccc(O)cc2)oc2cc(O)cc(O)c12,Various plants
+Naringenin,O=C1CC(c2ccc(O)cc2)Oc2cc(O)cc(O)c21,Citrus species
+Apigenin,O=c1cc(-c2ccc(O)cc2)oc2cc(O)cc(O)c12,Petroselinum crispum
+Baicalein,O=c1ccoc2cc(O)c(O)c(O)c12,Scutellaria baicalensis"""
+
+    compounds_input = st.text_area(
+        "Format: Name,SMILES,Plant Source (one per line)",
+        value=default_compounds,
+        height=200
+    )
+
+    st.markdown("---")
+    st.subheader("Option B: IMPPAT Database (Live Fetch)")
+    st.markdown("Fetch directly from Indian Medicinal Plants, Phytochemistry and Therapeutics database")
+
+    imppat_plant = st.text_input(
+        "Search plant name in IMPPAT:",
+        placeholder="e.g. Withania somnifera, Azadirachta indica",
+        help="IMPPAT has 17,000+ compounds from 1742 Indian medicinal plants"
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        run_manual = st.button("🔬 Screen Manual Compounds", use_container_width=True)
+    with col2:
+        run_imppat = st.button("🌿 Fetch & Screen from IMPPAT", use_container_width=True,
+                               disabled=not imppat_plant)
+
+    if run_manual or run_imppat:
+        if not RDKIT_AVAILABLE:
+            st.error("❌ RDKit not installed.")
+        else:
+            compounds_to_screen = []
+
+            if run_manual:
+                # Parse manual input
+                for line in compounds_input.strip().split("\n"):
+                    parts = [p.strip() for p in line.split(",")]
+                    if len(parts) >= 2:
+                        compounds_to_screen.append({
+                            "name": parts[0],
+                            "smiles": parts[1],
+                            "source": parts[2] if len(parts) > 2 else "Unknown"
+                        })
+
+            elif run_imppat:
+                with st.spinner(f"Fetching compounds for {imppat_plant} from IMPPAT..."):
+                    try:
+                        import requests as req
+                        # IMPPAT API
+                        url = f"https://imppat.iicb.res.in/api/compounds?plant={imppat_plant.replace(' ', '+')}&limit={max_compounds}"
+                        r = req.get(url, timeout=15)
+                        if r.status_code == 200:
+                            data = r.json()
+                            for comp in data.get("compounds", []):
+                                if comp.get("smiles"):
+                                    compounds_to_screen.append({
+                                        "name": comp.get("name", "Unknown"),
+                                        "smiles": comp.get("smiles", ""),
+                                        "source": imppat_plant
+                                    })
+                            st.success(f"✅ Fetched {len(compounds_to_screen)} compounds from IMPPAT")
+                        else:
+                            st.error(f"IMPPAT API error: {r.status_code}. Using manual list instead.")
+                            for line in default_compounds.strip().split("\n"):
+                                parts = [p.strip() for p in line.split(",")]
+                                if len(parts) >= 2:
+                                    compounds_to_screen.append({
+                                        "name": parts[0], "smiles": parts[1],
+                                        "source": parts[2] if len(parts) > 2 else "Unknown"
+                                    })
+                    except Exception as e:
+                        st.warning(f"⚠️ IMPPAT fetch failed ({str(e)}) — using manual compound list.")
+                        for line in default_compounds.strip().split("\n"):
+                            parts = [p.strip() for p in line.split(",")]
+                            if len(parts) >= 2:
+                                compounds_to_screen.append({
+                                    "name": parts[0], "smiles": parts[1],
+                                    "source": parts[2] if len(parts) > 2 else "Unknown"
+                                })
+
+            if not compounds_to_screen:
+                st.error("No compounds to screen.")
+            else:
+                st.markdown("---")
+                st.markdown(f"**Screening {len(compounds_to_screen)} compounds...**")
+
+                progress = st.progress(0)
+                status = st.empty()
+
+                results = []
+                pubmed_novel = []
+                lipinski_pass = []
+
+                for i, comp in enumerate(compounds_to_screen[:max_compounds]):
+                    name = comp["name"]
+                    smiles = comp["smiles"]
+                    source = comp["source"]
+                    status.text(f"Step 1/2: PubMed check — {name} ({i+1}/{min(len(compounds_to_screen), max_compounds)})")
+
+                    # ── PubMed Novelty Check ──
+                    pubmed_count = 0
+                    try:
+                        import requests as req
+                        pubmed_url = (
+                            f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+                            f"?db=pubmed&term={name.replace(' ', '+')}+AND+({search_query.replace(' ', '+')})"
+                            f"&retmax=1&retmode=json"
+                        )
+                        pr = req.get(pubmed_url, timeout=10)
+                        if pr.status_code == 200:
+                            pubmed_count = int(pr.json().get("esearchresult", {}).get("count", 999))
+                    except:
+                        pubmed_count = -1  # API error — mark as unknown
+
+                    # ── Lipinski Filter ──
+                    try:
+                        mol = Chem.MolFromSmiles(smiles)
+                        if mol:
+                            from rdkit.Chem import Descriptors, rdMolDescriptors
+                            mw   = Descriptors.MolWt(mol)
+                            logp = Descriptors.MolLogP(mol)
+                            hbd  = Descriptors.NumHDonors(mol)
+                            hba  = Descriptors.NumHAcceptors(mol)
+                            tpsa = Descriptors.TPSA(mol)
+                            rot  = rdMolDescriptors.CalcNumRotatableBonds(mol)
+
+                            violations = sum([mw > mw_cutoff, logp > logp_cutoff, hbd > 5, hba > 10])
+                            lipinski_ok = violations <= 1
+
+                            results.append({
+                                "Compound": name,
+                                "Plant Source": source,
+                                "PubMed (TNBC)": pubmed_count if pubmed_count >= 0 else "API err",
+                                "Novel?": "✅ YES" if pubmed_count == 0 else ("⚠️ Unknown" if pubmed_count < 0 else f"❌ {pubmed_count} papers"),
+                                "MW": round(mw, 1),
+                                "LogP": round(logp, 2),
+                                "HBD": hbd,
+                                "HBA": hba,
+                                "TPSA": round(tpsa, 1),
+                                "Ro5 Violations": violations,
+                                "Druglike?": "✅ Yes" if lipinski_ok else "❌ No",
+                                "SMILES": smiles,
+                                "Priority": "🔥 HIGH" if (pubmed_count == 0 and lipinski_ok) else
+                                           ("🟡 MEDIUM" if (pubmed_count <= 2 and lipinski_ok) else "⬇️ LOW")
+                            })
+                        else:
+                            results.append({
+                                "Compound": name, "Plant Source": source,
+                                "PubMed (TNBC)": pubmed_count, "Novel?": "❓ Invalid SMILES",
+                                "MW": "—", "LogP": "—", "HBD": "—", "HBA": "—",
+                                "TPSA": "—", "Ro5 Violations": "—", "Druglike?": "❌",
+                                "SMILES": smiles, "Priority": "⬇️ LOW"
+                            })
+                    except Exception as e:
+                        results.append({
+                            "Compound": name, "Plant Source": source,
+                            "PubMed (TNBC)": "err", "Novel?": f"Error: {str(e)[:30]}",
+                            "MW": "—", "LogP": "—", "HBD": "—", "HBA": "—",
+                            "TPSA": "—", "Ro5 Violations": "—", "Druglike?": "❌",
+                            "SMILES": smiles, "Priority": "⬇️ LOW"
+                        })
+
+                    progress.progress((i + 1) / min(len(compounds_to_screen), max_compounds))
+
+                status.text("✅ Screening complete!")
+                st.session_state["novel_results"] = results
+
+        # ── Display Results ──
+        if "novel_results" in st.session_state:
+            results = st.session_state["novel_results"]
+            df = pd.DataFrame(results)
+
+            st.markdown("---")
+
+            # Summary metrics
+            high_priority = [r for r in results if r["Priority"] == "🔥 HIGH"]
+            medium_priority = [r for r in results if r["Priority"] == "🟡 MEDIUM"]
+            novel_count = len([r for r in results if "YES" in str(r.get("Novel?", ""))])
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Screened", len(results))
+            c2.metric("🔥 Novel + Druglike", len(high_priority))
+            c3.metric("🟡 Low Publication", len(medium_priority))
+            c4.metric("Zero PubMed hits", novel_count)
+
+            if high_priority:
+                st.markdown("### 🔥 Top Priority — Novel Candidates (Zero TNBC Papers)")
+                hp_df = pd.DataFrame(high_priority)[["Compound", "Plant Source", "MW", "LogP", "TPSA", "Ro5 Violations", "Novel?", "Priority"]]
+                st.dataframe(hp_df, use_container_width=True, hide_index=True)
+
+                st.success(f"**{len(high_priority)} compounds found with ZERO TNBC publications — ready for docking!**")
+
+                # Show SMILES for top candidates to copy into Tab 5
+                st.markdown("#### 📋 SMILES for Docking (copy to Tab 5 Express Mode)")
+                for comp in high_priority[:5]:
+                    st.code(f"{comp['Compound']}: {comp['SMILES']}", language="text")
+
+            st.markdown("### 📊 Full Screening Results")
+            display_cols = ["Compound", "Plant Source", "PubMed (TNBC)", "Novel?", "MW", "LogP", "Ro5 Violations", "Druglike?", "Priority"]
+            st.dataframe(df[display_cols], use_container_width=True, hide_index=True)
+
+            # Download
+            csv = df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Full Screening Results (CSV)",
+                data=csv,
+                file_name=f"novel_TNBC_candidates_{datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+
+            st.info("""
+            **Next steps for HIGH priority compounds:**
+            1. Copy SMILES → Tab 5 Express Mode → Generate 3D ligand
+            2. Run AutoDock Vina docking against EGFR (or MMP1, MMP9)
+            3. Compare affinity vs Luteolin (-9.076 kcal/mol) and Afatinib (-8.57 kcal/mol)
+            4. Best result → ADMET analysis (Tab 7) → Preprint!
             """)
 
 
