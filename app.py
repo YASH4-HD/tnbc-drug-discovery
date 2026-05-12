@@ -1953,14 +1953,83 @@ with tab9:
 
     st.markdown("---")
 
-    # ── Option C: IMPPAT Live Fetch ──
-    st.subheader("🌿 Option C: Fetch from IMPPAT Database")
+    # ── Option C: CSV Upload (NPASS / LOTUS / COCONUT / custom) ──
+    st.subheader("📂 Option C: Upload CSV (NPASS / LOTUS / COCONUT / Custom)")
+    st.markdown("""
+    Upload a pre-filtered CSV from any database:
+    - **NPASS** — 35,000+ natural products (download from [npass.ab-lab.net](http://npass.ab-lab.net))
+    - **LOTUS** — 750,000+ natural products ([lotus.naturalproducts.net](https://lotus.naturalproducts.net))
+    - **COCONUT** — 400,000+ natural products ([coconut.naturalproducts.me](https://coconut.naturalproducts.me))
+    - **Custom** — any CSV with compound names + SMILES
+    
+    **Required columns:** `name` + `smiles` (case-insensitive). Optional: `source`
+    """)
+
+    uploaded_csv = st.file_uploader(
+        "Upload CSV file",
+        type=["csv"],
+        key="csv_upload",
+        help="Must have 'name' and 'smiles' columns. Source column optional."
+    )
+
+    if uploaded_csv:
+        try:
+            import io as _io
+            csv_df = pd.read_csv(_io.BytesIO(uploaded_csv.read()))
+            # Case-insensitive column matching
+            csv_df.columns = [c.lower().strip() for c in csv_df.columns]
+
+            if "name" not in csv_df.columns or "smiles" not in csv_df.columns:
+                st.error(f"❌ CSV must have 'name' and 'smiles' columns. Found: {list(csv_df.columns)}")
+            else:
+                csv_df = csv_df.dropna(subset=["name", "smiles"])
+                source_col = "source" if "source" in csv_df.columns else None
+
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total rows", len(csv_df))
+                col2.metric("With SMILES", csv_df["smiles"].notna().sum())
+                col3.metric("Unique names", csv_df["name"].nunique())
+
+                st.markdown("**Preview (first 5 rows):**")
+                st.dataframe(csv_df[["name", "smiles"] + ([source_col] if source_col else [])].head(), use_container_width=True)
+
+                max_import = st.slider(
+                    "Max compounds to import (recommend ≤200 for PubMed screening)",
+                    10, min(1000, len(csv_df)), min(100, len(csv_df)), step=10
+                )
+
+                if st.button("📥 Import to Screening List", use_container_width=True):
+                    existing_names = {c["name"].lower() for c in st.session_state.get("compound_list", [])}
+                    added = 0
+                    skipped = 0
+                    for _, row in csv_df.head(max_import).iterrows():
+                        name = str(row["name"]).strip()
+                        smiles = str(row["smiles"]).strip()
+                        source = str(row[source_col]).strip() if source_col else "CSV import"
+                        if name.lower() not in existing_names and smiles and smiles != "nan":
+                            st.session_state.setdefault("compound_list", []).append({
+                                "name": name, "smiles": smiles, "source": source
+                            })
+                            existing_names.add(name.lower())
+                            added += 1
+                        else:
+                            skipped += 1
+                    st.success(f"✅ Imported {added} compounds! ({skipped} duplicates skipped)")
+                    st.rerun()
+
+        except Exception as e:
+            st.error(f"❌ CSV read error: {str(e)}")
+
+    st.markdown("---")
+
+    # ── Option D: IMPPAT Live Fetch ──
+    st.subheader("🌿 Option D: Fetch from IMPPAT Database")
     imppat_plant = st.text_input(
         "Indian plant name:",
         placeholder="e.g. Withania somnifera, Azadirachta indica, Tinospora cordifolia",
         help="IMPPAT has 17,000+ compounds from 1742 Indian medicinal plants"
     )
-    if st.button("🌿 Fetch from IMPPAT & Add to List", use_container_width=False,
+    if st.button("🌿 Fetch from IMPPAT & Add to List", use_container_width=False, key="imppat_fetch_btn",
                  disabled=not imppat_plant):
         with st.spinner(f"Fetching from IMPPAT: {imppat_plant}..."):
             try:
